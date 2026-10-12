@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Отчёт проверки чертежей</title>
+<link rel="stylesheet" href="/static/style.css?v=20261012">
+</head>
+<body>
+<div class="topbar">
+  <a class="logo" href="/" title="Новая проверка"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 12h6M9 16h6"/></svg></a>
+  <div>
+    <h1>Отчёт проверки</h1>
+    <div class="muted" id="sub">Загрузка…</div>
+  </div>
+  <div class="spacer"></div>
+  <div class="chips" id="filters">
+    <button class="chip error" data-sev="error">Ошибки <b id="c-error">0</b></button>
+    <button class="chip warning" data-sev="warning">Предупреждения <b id="c-warning">0</b></button>
+    <button class="chip info" data-sev="info">Замечания <b id="c-info">0</b></button>
+  </div>
+  <a class="btn" id="excel" href="/api/jobs/{{ job_id }}/excel">Excel</a>
+  <a class="btn" href="/api/jobs/{{ job_id }}/remarks.docx" title="Перечень замечаний для конструктора">Замечания (Word)</a>
+  <a class="btn" href="/admin" title="Какие проверки выполнять">Настройки</a>
+  <a class="btn" href="/">Новая проверка</a>
+</div>
+
+<div class="layout">
+  <aside class="side">
+    <div class="search"><input type="text" id="q" placeholder="Поиск по обозначению, имени файла…"></div>
+    <div id="docs"></div>
+  </aside>
+  <main class="main" id="main"><div class="muted">Загрузка…</div></main>
+</div>
+
+<script>
+const JOB = "{{ job_id }}";
+const SEV_RU = {error: 'Ошибка', warning: 'Предупреждение', info: 'Замечание'};
+const KIND_RU = {linear: 'линейный', diameter: 'диаметр', radius: 'радиус', thread: 'резьба', chamfer: 'фаска',
+                 angle: 'угол', thickness: 'толщина', sphere: 'сфера', square: 'квадрат', thread_other: 'резьба',
+                 thread_tr: 'резьба Tr', thread_g: 'резьба G'};
+let data = [], current = 0, filters = {error: true, warning: true, info: true}, tab = 'findings', zoom = 1;
+let comp = null, view = 'doc', showHidden = false;
+const STATUS_RU = {ok: ['ok', 'Без замечаний'], warnings: ['warning', 'Проверить'], errors: ['error', 'Есть ошибки'],
+                   missing: ['error', 'НЕТ ЧЕРТЕЖА'], not_required: ['info', 'не требуется']};
+
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const num = v => v === null || v === undefined ? '' : String(v).replace('.', ',');
+const signed = v => v === null || v === undefined ? '' : (v > 0 ? '+' : '') + num(+v.toFixed(4));
+
+async function load() {
+  const r = await fetch(`/api/jobs/${JOB}?full=1`);
+  const j = await r.json();
+  data = j.results || [];
+  comp = j.completeness || null;
+  const tot = {error: 0, warning: 0, info: 0};
+  data.forEach(d => { for (const k in tot) tot[k] += d.counts[k]; });
+  for (const k in tot) document.getElementById('c-' + k).textContent = tot[k];
+  const spec = j.spec ? ` · спецификация «${esc(j.spec.name)}» (${j.spec.items} поз.)` : '';
+  document.getElementById('sub').innerHTML =
+    `${data.length} док.` + spec + (j.state === 'running' ? ` · идёт проверка ${j.done}/${j.total}…` : '') +
+    (j.warnings && j.warnings.length ? ` · <span style="color:var(--err)">${esc(j.warnings.join('; '))}</span>` : '');
+  if (!load.picked && comp) { view = 'comp'; load.picked = j.state !== 'running'; }
+  if (!load.picked && data.length) {
+    current = data.map((d, i) => i).sort((a, b) =>
+      (data[b].counts.error - data[a].counts.error) || (data[b].counts.warning - data[a].counts.warning) || a - b)[0];
+    load.picked = j.state !== 'running';
+  }
+  renderDocs();
+  if (view === 'comp' && comp) renderComp(); else if (data.length) renderDoc();
+  if (j.state === 'running') setTimeout(load, 1500);
+}
+
+function renderDocs() {
+  const q = document.getElementById('q').value.toLowerCase();
+  const order = data.map((d, i) => i).sort((a, b) =>
+    (data[b].counts.error - data[a].counts.error) || (data[b].counts.warning - data[a].counts.warning) || a - b);
+  const compItem = comp ? `<div class="doc-item ${view === 'comp' ? 'active' : ''}" id="comp-item">
+      <div class="des">Комплектность по спецификации</div>
+      <div class="chips">${comp.stats.missing ? `<span class="chip error">нет чертежа: ${comp.stats.missing}</span>` : ''}
+        ${comp.stats.errors ? `<span class="chip error">с ошибками: ${comp.stats.errors}</span>` : ''}
+        <span class="chip ok">OK: ${comp.stats.ok}</span></div></div>` : '';
+  document.getElementById('docs').innerHTML = compItem + order.filter(i => {
+    const d = data[i];
+    return !q || (d.file + ' ' + d.title.designation + ' ' + d.title.name).toLowerCase().includes(q);
+  }).map(i => {
+    const d = data[i], c = d.counts;
+    const chips = (c.error ? `<span class="chip error">${c.error}</span>` : '') +
+                  (c.warning ? `<span class="chip warning">${c.warning}</span>` : '') +
+                  (c.info ? `<span class="chip info">${c.info}</span>` : '') +
+                  (!c.error && !c.warning ? '<span class="chip ok">OK</span>' : '');
+    return `<div class="doc-item ${view === 'doc' && i === current ? 'active' : ''}" data-i="${i}">
+      <div class="des">${esc(d.title.designation || d.file)}${d.sheets ? ` <span class="muted">${esc(d.sheets)}</span>` : ''}</div>
+      <div class="nm">${esc(d.title.name || '')} · ${esc(d.file)}</div>
+      <div class="chips">${chips}</div></div>`;
+  }).join('');
+  document.querySelectorAll('.doc-item[data-i]').forEach(el => el.onclick = () => {
+    current = +el.dataset.i; view = 'doc'; load.picked = true; renderDocs(); renderDoc(); });
+  const ci = document.getElementById('comp-item');
+  if (ci) ci.onclick = () => { view = 'comp'; load.picked = true; renderDocs(); renderComp(); };
+}
+
+function renderComp() {
+  const rows = comp.rows.filter(r => r.need || r.status !== 'not_required');
+  document.getElementById('main').innerHTML = `
+    <div class="doc-head"><div><h1>Комплектность по спецификации</h1>
+      <div class="muted">Позиции СП, которым положен чертёж (детали и сборочные единицы), и результат проверки их чертежей</div></div></div>
+    <div class="chips" style="margin-bottom:12px">
+      <span class="chip error">Нет чертежа: ${comp.stats.missing}</span><span class="chip error">С ошибками: ${comp.stats.errors}</span>
+      <span class="chip warning">Проверить: ${comp.stats.warnings}</span><span class="chip ok">Без замечаний: ${comp.stats.ok}</span></div>
+    <table class="grid"><tr><th>Поз.</th><th>Обозначение</th><th>Наименование</th><th>Раздел</th><th>Статус</th><th>Файл</th></tr>
+    ${rows.map(r => { const [cls, txt] = STATUS_RU[r.status];
+      return `<tr class="${r.doc_id !== null ? 'go' : ''}" data-doc="${r.doc_id ?? ''}" style="${r.doc_id !== null ? 'cursor:pointer' : ''}">
+        <td>${esc(r.pos)}</td><td class="mono">${esc(r.designation || r.sku)}</td><td>${esc(r.name)}</td><td>${esc(r.section)}</td>
+        <td><span class="chip ${cls}">${txt}${r.errors ? ' · ' + r.errors : ''}</span></td><td class="muted">${esc(r.file)}</td></tr>`; }).join('')}
+    ${comp.extra.map(x => `<tr><td></td><td class="mono">${esc(x.designation)}</td><td colspan="2" class="muted">чертёж есть, а в спецификации позиции нет</td>
+        <td><span class="chip warning">нет в СП</span></td><td class="muted">${esc(x.file)}</td></tr>`).join('')}
+    </table>`;
+  document.querySelectorAll('tr.go').forEach(tr => tr.onclick = () => {
+    const i = data.findIndex(d => String(d.id) === tr.dataset.doc);
+    if (i >= 0) { current = i; view = 'doc'; renderDocs(); renderDoc(); }
+  });
+}
+
+async function addException(f, scope) {
+  const d = data[current];
+  if (scope === 'global') {
+    if (!confirm(`Отключить проверку ${f.code} для всех чертежей? Включить её снова можно в «Настройках».`)) return;
+    const r = await fetch('/api/admin/rule', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({code: f.code, enabled: false})});
+    if (r.status === 401) {
+      if (confirm('Отключать проверки может только администратор. Открыть «Настройки» для входа?')) location.href = '/admin';
+      return;
+    }
+    return load();
+  }
+  await fetch('/api/exceptions', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({scope, code: f.code, message: f.message, designation: d.title.designation, file: d.file})});
+  load();
+}
+async function removeException(id) {
+  await fetch('/api/exceptions/' + id, {method: 'DELETE'});
+  load();
+}
+
+function visibleFindings(d) {
+  return d.findings.map((f, i) => ({...f, n: i + 1})).filter(f => filters[f.severity]);
+}
+
+function renderDoc() {
+  const d = data[current]; if (!d) return;
+  const t = d.title, fs = visibleFindings(d);
+  const facts = d.facts || {};
+  const isSpec = d.kind === 'spec';
+  const kv = isSpec ? [
+    ['Файл', d.file], ['Наименование', t.name], ['Тип', 'спецификация (проверка по ГОСТ 2.106)'],
+    ['Сборочных единиц', String((facts.spec_tree || []).length)],
+  ] : [
+    ['Файл', d.file + (d.sheets ? ' · ' + d.sheets : '')], ['Наименование', t.name], ['Материал', t.material],
+    ['Масса', t.mass ? t.mass + ' кг' + (facts.mass_ref ? ` (СП: ${num(+facts.mass_ref.toFixed(4))})` : '') : '—'],
+    ['Масштаб / формат', [t.scale, t.format].filter(Boolean).join(' · ')],
+    ['Габариты (оценка)', facts.overall ? Object.entries(facts.overall).map(([k, v]) => `${k}=${num(v)}`).join(' ') : '—'],
+    ['Толщина листа', facts.sheet_thickness ? num(facts.sheet_thickness) + ' мм' : '—'],
+    ['Тип', (d.kind || '') + (d.ocr ? ' · OCR' : '') + (facts.converted ? ' · через ' + facts.converted : '')],
+  ];
+  const mp = facts.mass_parts;
+  if (mp && (mp.parts || mp.unknown)) kv.splice(4, 0, ['Масса частей', mp.parts
+    ? `${num(mp.known)} кг по ${mp.parts} поз.` + (mp.unknown ? ` · без массы ${mp.unknown} поз.` : ' · все известны')
+    : `неизвестна (${mp.unknown} поз.)`]);
+  if (d.dxf) kv.push(['DXF', `${d.dxf.name} · ${num(d.dxf.size[0])}×${num(d.dxf.size[1])}`]);
+  if (d.welds && d.welds.length) kv.push(['Сварные швы', d.welds.map(w => w.raw).join('; ')]);
+  const pages = d.pages.filter(p => p.image);
+  const viewer = pages.length ? `
+    <div class="viewer">
+      <div class="zoombar"><button class="btn" id="zin">+</button><button class="btn" id="zout">−</button>
+        <button class="btn" id="zfit">По ширине</button><span class="muted">Нажмите на замечание — место подсветится</span></div>
+      <div class="pages-scroll"><div class="pages-inner" id="pages" style="width:${zoom * 100}%">
+        ${pages.map(p => `<div class="page" data-page="${p.number}"><img src="${p.image}" alt="Лист ${p.number + 1}">
+          <span class="pno">лист ${p.number + 1}</span>
+          ${fs.filter(f => f.page === p.number && f.bbox).map(f => {
+            const pad = 1.2, [x0, y0, x1, y1] = f.bbox;
+            return `<div class="mark ${f.severity}" data-n="${f.n}" title="${esc(f.message)}" style="left:${(x0 - pad) / p.width * 100}%;top:${(y0 - pad) / p.height * 100}%;width:${(x1 - x0 + 2 * pad) / p.width * 100}%;height:${(y1 - y0 + 2 * pad) / p.height * 100}%"><span class="n">${f.n}</span></div>`;
+          }).join('')}
+        </div>`).join('')}
+      </div></div>
+    </div>` : isSpec ? `<div class="card flush"><table class="grid">
+      <thead><tr><th>Поз.</th><th>Сборочная единица</th><th>Составных частей</th></tr></thead>
+      <tbody>${(facts.spec_tree || []).map(n => `<tr><td class="mono">${esc(n.pos || '—')}</td>
+        <td><span class="mono">${esc(n.designation || '')}</span> ${esc(n.name || '')}</td><td>${n.children}</td></tr>`).join('')}
+      </tbody></table></div>`
+    : `<div class="banner">Предпросмотр листа недоступен для этого формата (${esc(d.kind)}).</div>`;
+
+  document.getElementById('main').innerHTML = `
+    <div class="doc-head"><a class="btn" style="order:2" href="/api/jobs/${JOB}/remarks.docx?doc=${d.id}">Замечания (Word)</a><div style="flex:1;min-width:260px">
+      <h1>${esc(t.designation || d.file)} <span class="muted" style="font-weight:400">${esc(t.name || '')}</span></h1>
+      <div class="kv">${kv.map(([k, v]) => `<div><span>${k}</span>${esc(v || '—')}</div>`).join('')}</div>
+    </div></div>
+    ${d.error ? `<div class="error-box">${esc(d.error)}</div>` : ''}
+    <div class="split">
+      <div>${viewer}</div>
+      <div>
+        <div class="tabs">
+          ${[['findings', `Замечания (${fs.length})`], ['dims', `Размеры (${d.dims.length})`], ['limits', 'Допуски'],
+             ['title', 'Основная надпись'], ['tt', `ТТ (${d.tt.length})`]]
+            .map(([k, v]) => `<button data-tab="${k}" class="${tab === k ? 'active' : ''}">${v}</button>`).join('')}
+        </div>
+        <div id="tabbody">${renderTab(d, fs)}</div>
+      </div>
+    </div>`;
+  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { tab = b.dataset.tab; renderDoc(); });
+  bindMarks();
+  bindActions();
+  const setZoom = z => { zoom = Math.max(1, Math.min(4, z)); document.getElementById('pages').style.width = zoom * 100 + '%'; };
+  if (pages.length) {
+    document.getElementById('zin').onclick = () => setZoom(zoom * 1.4);
+    document.getElementById('zout').onclick = () => setZoom(zoom / 1.4);
+    document.getElementById('zfit').onclick = () => setZoom(1);
+  }
+}
+
+function hiddenBlock(d) {
+  const h = d.suppressed || [];
+  if (!h.length) return '';
+  return `<div class="cat" style="margin-top:16px"><h3><a href="#" id="toggle-hidden">Скрытые «не ошибка» (${h.length}) ${showHidden ? '▲' : '▼'}</a></h3>
+    ${showHidden ? h.map(f => `<div class="finding info" style="opacity:.75"><div class="num">−</div><div><div>${esc(f.message)}</div>
+      <div class="meta"><span>${esc(f.code)} · ${f.rule_scope === 'global' ? 'правило отключено везде' : 'отмечено для этого чертежа'}</span>
+      <span class="acts"><a href="#" data-unex="${f.rule_id}">вернуть</a></span></div></div></div>`).join('') : ''}</div>`;
+}
+
+function renderTab(d, fs) {
+  if (tab === 'findings') {
+    if (!fs.length) return `<div class="empty">${d.findings.length ? 'Все замечания скрыты фильтром' : 'Замечаний нет'}</div>` + hiddenBlock(d);
+    const cats = [...new Set(fs.map(f => f.category))];
+    return cats.map(c => `<div class="cat"><h3>${esc(c)}</h3>${fs.filter(f => f.category === c).map(f => `
+      <div class="finding ${f.severity} ${f.bbox ? 'has-loc' : ''}" data-n="${f.n}">
+        <div class="num">${f.n}</div>
+        <div><div>${esc(f.message)}</div>
+          <div class="meta"><span>${SEV_RU[f.severity]} · ${esc(f.code)}</span>${f.standard ? `<span>${esc(f.standard)}</span>` : ''}
+          ${f.page !== null && f.page !== undefined ? `<span>лист ${f.page + 1}</span>` : ''}
+          <span class="acts"><a href="#" data-ex="drawing" data-n="${f.n}">не ошибка</a> · <a href="#" data-ex="global" data-n="${f.n}">отключить правило</a></span></div></div>
+      </div>`).join('')}</div>`).join('') + hiddenBlock(d);
+  }
+  if (tab === 'dims') {
+    if (!d.dims.length) return '<div class="muted">Размеры не извлечены (для .cdw/.dft без САПР — только основная надпись и ТТ).</div>';
+    return `<table class="grid"><tr><th>Размер</th><th>Тип</th><th>Номинал</th><th>Поле</th><th>Верх.</th><th>Ниж.</th><th>Прим.</th></tr>
+      ${d.dims.map(x => `<tr><td class="mono">${esc(x.raw)}</td><td>${KIND_RU[x.kind] || x.kind}</td><td>${num(x.nominal)}</td>
+        <td>${esc(x.field || x.fit || '')}</td><td>${signed(x.upper)}</td><td>${signed(x.lower)}</td>
+        <td>${[x.reference ? 'справочный' : '', x.count ? x.count + ' шт.' : ''].filter(Boolean).join(', ')}</td></tr>`).join('')}</table>`;
+  }
+  if (tab === 'limits') {
+    if (!d.limits.length) return '<div class="muted">На чертеже нет размеров с полями допусков или отклонениями.</div>';
+    return `<table class="grid"><tr><th>Размер</th><th>Поле / посадка</th><th>Предельные отклонения (ГОСТ 25346)</th><th>Квалитет</th></tr>
+      ${d.limits.map(x => `<tr><td class="mono">${esc(x.dim)}</td><td>${esc(x.code || 'числом')}</td><td>${esc(x.limits)}</td>
+        <td>${x.grade ? 'IT' + x.grade : ''}</td></tr>`).join('')}</table>`;
+  }
+  if (tab === 'title') {
+    const t = d.title;
+    const rows = [['Обозначение', t.designation], ['Наименование', t.name], ['Материал', t.material], ['Масса', t.mass],
+      ['Масштаб', t.scale], ['Формат', t.format], ['Листов', t.sheets], ['Организация', t.organization],
+      ...Object.entries(t.people || {}).map(([k, v]) => [k, v]),
+      ...(t.changes || []).map(c => ['Изменение ' + c.num, [c.sheet, c.doc, c.date].filter(Boolean).join(' · ')])];
+    return (t.found ? '' : '<div class="banner">Основная надпись по форме 1 не распознана — поля могут быть пустыми.</div>') +
+      `<table class="grid">${rows.map(([k, v]) => `<tr><th style="width:38%">${esc(k)}</th><td>${esc(v || '—')}</td></tr>`).join('')}</table>`;
+  }
+  if (tab === 'tt') {
+    const rough = (d.roughness || []).map(r => `${r.param} ${num(r.value)}${r.general ? ' (общая)' : ''}`).join(', ');
+    return (d.tt.length ? `<ol class="tt-list">${d.tt.map(x => `<li>${esc(x)}</li>`).join('')}</ol>` : '<div class="muted">ТТ не найдены</div>') +
+      `<p class="muted">Шероховатость на листе: ${esc(rough || 'не указана')}</p>`;
+  }
+  return '';
+}
+
+function bindActions() {
+  const d = data[current];
+  document.querySelectorAll('[data-ex]').forEach(a => a.onclick = ev => {
+    ev.preventDefault(); ev.stopPropagation();
+    const f = d.findings[+a.dataset.n - 1]; addException(f, a.dataset.ex);
+  });
+  document.querySelectorAll('[data-unex]').forEach(a => a.onclick = ev => { ev.preventDefault(); removeException(a.dataset.unex); });
+  const t = document.getElementById('toggle-hidden');
+  if (t) t.onclick = ev => { ev.preventDefault(); showHidden = !showHidden; renderDoc(); };
+}
+
+function bindMarks() {
+  const hl = n => {
+    document.querySelectorAll('.hl').forEach(e => e.classList.remove('hl'));
+    document.querySelectorAll(`[data-n="${n}"]`).forEach(e => e.classList.add('hl'));
+  };
+  document.querySelectorAll('.finding.has-loc').forEach(el => el.onclick = () => {
+    hl(el.dataset.n);
+    const m = document.querySelector(`.mark[data-n="${el.dataset.n}"]`);
+    if (m) m.scrollIntoView({behavior: 'smooth', block: 'center', inline: 'center'});
+  });
+  document.querySelectorAll('.mark').forEach(el => el.onclick = () => {
+    hl(el.dataset.n); tab = tab === 'findings' ? tab : 'findings';
+    const f = document.querySelector(`.finding[data-n="${el.dataset.n}"]`);
+    if (f) f.scrollIntoView({behavior: 'smooth', block: 'center'});
+  });
+}
+
+document.querySelectorAll('#filters button').forEach(b => b.onclick = () => {
+  filters[b.dataset.sev] = !filters[b.dataset.sev];
+  b.classList.toggle('off', !filters[b.dataset.sev]);
+  renderDoc();
+});
+document.getElementById('q').oninput = renderDocs;
+load();
+</script>
+</body>
+</html>

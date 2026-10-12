@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Проверка чертежей</title>
+<link rel="stylesheet" href="/static/style.css?v=20261012">
+</head>
+<body>
+<div class="topbar">
+  <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 12h6M9 16h6"/></svg></div>
+  <div>
+    <h1>Проверка чертежей</h1>
+    <div class="muted">Размеры, допуски и посадки · технологичность · ТТ · масса · сверка со спецификацией / ERP</div>
+  </div>
+  <div class="spacer"></div>
+  <a class="btn" href="/admin" title="Какие проверки по ГОСТам выполнять">Настройки</a>
+</div>
+
+<div class="wrap">
+  <form id="form" class="card">
+    <h2>1. Чертежи</h2>
+    <div id="drop" class="drop">
+      <strong>Перетащите сюда файлы или папку — или нажмите, чтобы выбрать</strong>
+      <span class="muted">PDF (векторные и сканы), КОМПАС .cdw, Solid Edge .dft, PNG/JPG/TIF, ZIP-архив. DXF-развёртки кладите сюда же — сверятся с чертежами</span>
+    </div>
+    <input id="files" type="file" multiple hidden accept=".pdf,.cdw,.spw,.frw,.dft,.dxf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.zip">
+    <ul id="filelist" class="filelist"></ul>
+    <div style="margin-top:14px">
+      <label class="field" for="folder">…или путь к папке на этом компьютере</label>
+      <input id="folder" type="text" placeholder="D:\КД\Опора пассивная">
+      <div class="hint">Проверяются все чертежи в папке и подпапках, файлы никуда не копируются.</div>
+    </div>
+  </form>
+
+  <div class="card">
+    <h2>2. Спецификация или выгрузка ERP <span class="muted" style="font-weight:400">(необязательно)</span></h2>
+    <div class="row">
+      <div>
+        <input id="spec" type="file" accept=".xlsx,.xlsm,.xls">
+        <div class="hint">СП из ERP (шаблон СП / табличный экспорт) или отчёт спецификации КОМПАС. По ней сверяются масса,
+          наименование, материал, марка и толщина листа, и строится комплектность: каких чертежей не хватает.</div>
+      </div>
+      <div>
+        <label class="check"><input id="ocr" type="checkbox" checked> Распознавать сканы (OCR, локально)</label>
+        <div class="hint">Около 10 с на лист. Без интернета и без внешних сервисов.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <button id="go" class="btn primary">Проверить</button>
+    <div id="prog" style="display:none;margin-top:14px">
+      <div class="progress"><div id="bar"></div></div>
+      <div id="ptext" class="muted" style="margin-top:6px"></div>
+    </div>
+    <div id="err" class="error-box" style="display:none"></div>
+  </div>
+
+  <div class="card history">
+    <h2>Последние проверки</h2>
+    <div id="hist" class="muted">—</div>
+  </div>
+</div>
+
+<script>
+const drop = document.getElementById('drop'), input = document.getElementById('files');
+const list = document.getElementById('filelist');
+let picked = [];
+
+function render() {
+  list.innerHTML = '';
+  picked.forEach((f, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${f.webkitRelativePath || f.relPath || f.name}</span><span class="muted">${(f.size/1024).toFixed(0)} КБ <button title="Убрать">×</button></span>`;
+    li.querySelector('button').onclick = () => { picked.splice(i, 1); render(); };
+    list.appendChild(li);
+  });
+}
+drop.onclick = () => input.click();
+input.onchange = () => { picked.push(...input.files); input.value = ''; render(); };
+['dragenter', 'dragover'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('over'); }));
+
+async function walk(entry, path) {
+  if (entry.isFile) {
+    return new Promise(res => entry.file(f => { f.relPath = path + f.name; res([f]); }, () => res([])));
+  }
+  if (entry.isDirectory) {
+    const reader = entry.createReader(); let all = [];
+    while (true) {
+      const batch = await new Promise(res => reader.readEntries(res, () => res([])));
+      if (!batch.length) break;
+      for (const e of batch) all = all.concat(await walk(e, path + entry.name + '/'));
+    }
+    return all;
+  }
+  return [];
+}
+drop.addEventListener('drop', async ev => {
+  const items = [...(ev.dataTransfer.items || [])];
+  if (items.length && items[0].webkitGetAsEntry) {
+    for (const it of items) { const e = it.webkitGetAsEntry(); if (e) picked.push(...await walk(e, '')); }
+  } else picked.push(...ev.dataTransfer.files);
+  render();
+});
+
+document.getElementById('go').onclick = async ev => {
+  ev.preventDefault();
+  const err = document.getElementById('err'); err.style.display = 'none';
+  const fd = new FormData();
+  picked.forEach(f => fd.append('files', f, f.name));
+  fd.append('folder', document.getElementById('folder').value);
+  const spec = document.getElementById('spec').files[0];
+  if (spec) fd.append('spec', spec);
+  fd.append('ocr', document.getElementById('ocr').checked ? '1' : '0');
+  const btn = document.getElementById('go'); btn.disabled = true;
+  document.getElementById('prog').style.display = 'block';
+  document.getElementById('ptext').textContent = 'Загрузка файлов…';
+  try {
+    const r = await fetch('/api/jobs', {method: 'POST', body: fd});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    poll(j.job_id);
+  } catch (e) { err.textContent = e.message; err.style.display = 'block'; btn.disabled = false; }
+};
+
+async function poll(id) {
+  const r = await fetch(`/api/jobs/${id}`); const j = await r.json();
+  const pct = j.total ? Math.round(100 * j.done / j.total) : 0;
+  document.getElementById('bar').style.width = pct + '%';
+  document.getElementById('ptext').textContent = `Проверено ${j.done} из ${j.total}` + (j.current ? ` · ${j.current}` : '');
+  if (j.state === 'done') { location.href = `/job/${id}`; return; }
+  if (j.state === 'error') {
+    const err = document.getElementById('err'); err.textContent = j.error; err.style.display = 'block'; return;
+  }
+  setTimeout(() => poll(id), 700);
+}
+
+fetch('/api/history').then(r => r.json()).then(h => {
+  const box = document.getElementById('hist');
+  if (!h.length) { box.textContent = 'Пока нет'; return; }
+  box.innerHTML = h.map(x => {
+    const d = x.id.slice(0, 8), t = x.id.slice(9, 15);
+    const when = `${d.slice(6,8)}.${d.slice(4,6)}.${d.slice(0,4)} ${t.slice(0,2)}:${t.slice(2,4)}`;
+    return `<a href="/job/${x.id}"><span>${when} · ${x.count} док.</span><span class="chips">
+      <span class="chip error">${x.errors}</span><span class="chip warning">${x.warnings}</span></span></a>`;
+  }).join('');
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+work/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+samples/test/
+admin.json
+exceptions.json
+dist/
+build/
+samples/
+config.json
+.claude/
