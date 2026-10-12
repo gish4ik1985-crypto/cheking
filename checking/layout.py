@@ -18,6 +18,7 @@ from .titleblock import excluded
 STD = "ГОСТ 2.307-2011"
 MIN_CONTOUR = 10.0
 MIN_PARALLEL = 7.0
+THICK = 0.4        # мм: линия толще — основная (контур), выносной быть не может
 TOL = 2.0          # оценка по выносным линиям грубая (±2 мм): замечание — только при явном нарушении
 
 
@@ -36,10 +37,15 @@ def _area(b) -> float:
     return max(b[2] - b[0], 0.01) * max(b[3] - b[1], 0.01)
 
 
-def _lines_of(drw: Drawing, pg: int):
-    """Горизонтальные и вертикальные отрезки листа: (a, b, c) — диапазон по оси и положение."""
+def _lines_of(drw: Drawing, pg: int, thin_only: bool = False):
+    """Горизонтальные и вертикальные отрезки листа: (a, b, c) — диапазон по оси и положение.
+    thin_only — без основных линий контура (выносные линии тонкие, ГОСТ 2.303)."""
     hor, ver = [], []
-    for x1, y1, x2, y2 in (drw.facts.get("_segments") or {}).get(pg, []):
+    segs = (drw.facts.get("_segments") or {}).get(pg, [])
+    ws = (drw.facts.get("_seg_widths") or {}).get(pg) or []
+    for i, (x1, y1, x2, y2) in enumerate(segs):
+        if thin_only and i < len(ws) and ws[i] is not None and ws[i] > THICK:
+            continue
         if abs(y1 - y2) < 0.15 and abs(x2 - x1) > 2.5:
             hor.append((min(x1, x2), max(x1, x2), (y1 + y2) / 2))
         elif abs(x1 - x2) < 0.15 and abs(y2 - y1) > 2.5:
@@ -122,7 +128,8 @@ def check_layout(drw: Drawing, cfg: dict) -> None:
 
     # --- D32/D33: расстояния ---
     hor, ver = _lines_of(drw, drw.first_page)
-    chor, cver = _chain(hor), _chain(ver)
+    thor, tver = _lines_of(drw, drw.first_page, thin_only=True)
+    chor, cver = _chain(thor), _chain(tver)
     found = []
     for d in dims:
         if d.kind not in ("linear", "diameter"):

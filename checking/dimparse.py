@@ -13,6 +13,8 @@ COUNT_HEAD = re.compile(r"^(?P<n>\d+)\s*(?:отв\.?|фаск[иа]?|паз(?:а
 COUNT_TAIL = re.compile(r"\s*(?P<n>\d+)\s*(?:отв\.?|фаск[иа]?|паз(?:а|ов)?|шт\.?)$", re.I)
 COUNT_ONLY = re.compile(r"^(?P<n>\d+)\s*(?:отв\.?|фаск[иа]?|паз(?:а|ов)?)$", re.I)
 CHAMFER = re.compile(rf"^(?P<leg>{NUM})\s*×\s*(?P<ang>\d+)\s*°$")
+# цепочка равных интервалов «n×p=L» (ГОСТ 2.307 п. 5.48): размер — общая длина L
+CHAIN = re.compile(rf"^(?P<n>\d+)\s*[×xх]\s*(?P<p>{NUM})\s*=\s*(?P<total>{NUM})$")
 ANGLE = re.compile(rf"^(?P<deg>{NUM})\s*°(?:\s*\d+\s*['′])?(?:\s*±\s*\d+\s*['′°])?$")
 TOL_CH = r"[A-Za-zЕНеGgh]"
 THREAD = re.compile(
@@ -89,6 +91,11 @@ def parse_dimension(text: str) -> dict | None:
     if re.search(r"\d\.\d", s):
         out["decimal_point"] = True
 
+    m = CHAIN.match(s)
+    if m:
+        out.update(kind="linear", nominal=to_float(m.group("total")), pitch=to_float(m.group("p")),
+                   chain=int(m.group("n")))
+        return out
     m = CHAMFER.match(s)
     if m:
         out.update(kind="chamfer", nominal=to_float(m.group("leg")), angle=to_float(m.group("ang")))

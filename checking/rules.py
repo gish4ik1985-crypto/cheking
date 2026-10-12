@@ -46,6 +46,10 @@ def check_dimensions(drw: Drawing, cfg: dict) -> None:
         pg, bb = d.page, d.bbox
         nom = d.nominal
 
+        if d.chain and d.pitch and nom and abs(d.chain * d.pitch - nom) > 1e-6:
+            drw.add(ERROR, "D34", CAT_DIM, f"Цепочка {_lbl(d)}: {d.chain}×{fmtn(d.pitch)} = "
+                    f"{fmtn(round(d.chain * d.pitch, 3))}, а не {fmtn(nom)}", pg, bb, STD_DIM)
+
         if d.decimal_point:
             drw.add(WARNING, "D07", CAT_DIM, f"В размере {_lbl(d)} дробная часть отделена точкой — по ЕСКД "
                     f"используют запятую", pg, bb, STD_DIM)
@@ -390,7 +394,8 @@ def _overall(drw: Drawing) -> dict:
     lin_h, lin_v, diam = [], [], []
     p0 = drw.page_info(drw.first_page)
     k = _scale_factor(drw.title.scale)
-    limit = max(p0.width, p0.height) * (k or 1) * 1.2 if (p0 and k) else None
+    # изображение с разрывом (ГОСТ 2.305 п. 9.3) короче детали — запас в 3 длины листа
+    limit = max(p0.width, p0.height) * (k or 1) * 3.0 if (p0 and k) else None
     for d in drw.dims:
         if not d.nominal or d.kind in ("angle", "chamfer", "thread_other"):
             continue
@@ -398,11 +403,16 @@ def _overall(drw: Drawing) -> dict:
             continue
         if s and abs(d.nominal - s) < 1e-6 and (d.reference or d.kind == "thickness"):
             continue
+        if d.kind in ("diameter", "sphere", "thread") and d.count:
+            continue                              # «6 отв. ⌀9» — элементы, а не габарит детали
         if d.kind in ("diameter", "sphere"):
             diam.append(d.nominal)
         elif d.kind == "thread":
             diam.append(d.nominal)
-        elif d.kind in ("linear", "square"):
+        elif d.kind == "square":                  # □220 — обе стороны
+            lin_h.append(d.nominal)
+            lin_v.append(d.nominal)
+        elif d.kind == "linear":
             (lin_v if d.vertical else lin_h).append(d.nominal)
     out = {}
     if lin_h or lin_v or diam:
@@ -413,7 +423,8 @@ def _overall(drw: Drawing) -> dict:
         rest = sorted(allv, reverse=True)[1:]
         if rest:
             out["W_max"] = rest[0]                      # самая «щедрая» оценка второй стороны
-        if diam:
+        # диаметр меньше обоих габаритов в плане — это отверстие в призматической детали, а не тело вращения
+        if diam and not (lin_h and lin_v and max(diam) < min(max(lin_h), max(lin_v))):
             out["D"] = max(diam)
     return out
 

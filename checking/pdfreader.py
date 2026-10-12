@@ -128,9 +128,11 @@ def extract_vector_lines(page: pymupdf.Page, pno: int) -> tuple[list[TextLine], 
     return keep, words
 
 
-def extract_segments(page: pymupdf.Page, curves: list | None = None) -> list[tuple[float, float, float, float]]:
+def extract_segments(page: pymupdf.Page, curves: list | None = None,
+                     widths: list | None = None) -> list[tuple[float, float, float, float]]:
     """Прямые отрезки графики листа в мм (в системе повёрнутого листа). Кривые Безье (окружности, дуги)
-    в отрезки не входят; если передан список curves — туда пишется их контрольный многоугольник."""
+    в отрезки не входят; если передан список curves — туда пишется их контрольный многоугольник.
+    widths — толщины линий отрезков в мм (параллельно результату; None — не указана)."""
     m = page.rotation_matrix
     segs = []
     try:
@@ -138,6 +140,8 @@ def extract_segments(page: pymupdf.Page, curves: list | None = None) -> list[tup
     except Exception:
         return segs
     for p in paths:
+        pw = p.get("width")
+        pw = pw * PT if isinstance(pw, (int, float)) else None
         for it in p.get("items", []):
             if it[0] == "c":
                 if curves is not None:
@@ -157,6 +161,8 @@ def extract_segments(page: pymupdf.Page, curves: list | None = None) -> list[tup
             for a, b in pts:
                 a, b = a * m, b * m
                 segs.append((a.x * PT, a.y * PT, b.x * PT, b.y * PT))
+                if widths is not None:
+                    widths.append(pw)
     return segs
 
 
@@ -251,7 +257,9 @@ def read_pdf(path: str, drw: Drawing, img_dir: str | None, use_ocr: bool = True,
             lines, words = extract_vector_lines(page, pno)
             if lines:
                 curves: list = []
-                drw.facts.setdefault("_segments", {})[pno] = extract_segments(page, curves)
+                widths: list = []
+                drw.facts.setdefault("_segments", {})[pno] = extract_segments(page, curves, widths)
+                drw.facts.setdefault("_seg_widths", {})[pno] = widths
                 drw.facts.setdefault("_curves", {})[pno] = curves
             nchars = sum(len(l.text) for l in lines)
             if nchars < 25:

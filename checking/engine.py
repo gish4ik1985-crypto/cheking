@@ -77,7 +77,7 @@ def _split_documents(drw: Drawing, words: list) -> list[tuple[Drawing, list]]:
                 w.line_no = idx_map.get(w.line_no, -1)
                 sub_words.append(w)
         sub.facts["part_of_package"] = True
-        for key in ("_segments", "_curves"):
+        for key in ("_segments", "_curves", "_seg_widths"):
             sub.facts[key] = {k: v for k, v in (drw.facts.get(key) or {}).items() if k in nums}
         sub.facts["sheets_label"] = f"л. {st + 1}" + (f"–{end}" if end - st > 1 else "")
         out.append((sub, sub_words))

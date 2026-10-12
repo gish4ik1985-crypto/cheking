@@ -92,6 +92,7 @@ class Dimension:
     cyrillic_in_field: bool = False
     decimal_point: bool = False    # использована точка вместо запятой
     g_size: str | None = None      # трубная резьба G: «1 1/2»
+    chain: int | None = None       # «n×p=L»: число интервалов
     source: str = "pdf"
 
     @property
