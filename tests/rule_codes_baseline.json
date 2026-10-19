@@ -1,0 +1,770 @@
+{
+ "_comment": "Коды, группы, включение по умолчанию и важность правил в версии, которую тестируют пользователи (последний коммит до добавления ОСТ и рефакторинга панели). Коды нельзя удалять и переименовывать: на них ссылаются exceptions.json, config.json и отметки тестировщиков. Менять остальные поля — только осознанно, вместе с docs/MIGRATION.md.",
+ "rules": {
+  "D01": {
+   "group": "fits",
+   "default": true,
+   "severity": "error"
+  },
+  "D02": {
+   "group": "fits",
+   "default": true,
+   "severity": "warning"
+  },
+  "D03": {
+   "group": "fits",
+   "default": true,
+   "severity": "error"
+  },
+  "D12": {
+   "group": "fits",
+   "default": true,
+   "severity": "info"
+  },
+  "D30": {
+   "group": "fits",
+   "default": true,
+   "severity": "info"
+  },
+  "D13": {
+   "group": "fits",
+   "default": true,
+   "severity": "error"
+  },
+  "D28": {
+   "group": "fits",
+   "default": true,
+   "severity": "warning"
+  },
+  "D16": {
+   "group": "fits",
+   "default": true,
+   "severity": "info"
+  },
+  "D18": {
+   "group": "fits",
+   "default": true,
+   "severity": "info"
+  },
+  "D04": {
+   "group": "dims",
+   "default": true,
+   "severity": "error"
+  },
+  "D05": {
+   "group": "dims",
+   "default": true,
+   "severity": "warning"
+  },
+  "D06": {
+   "group": "dims",
+   "default": true,
+   "severity": "warning"
+  },
+  "D07": {
+   "group": "dims",
+   "default": true,
+   "severity": "warning"
+  },
+  "D08": {
+   "group": "dims",
+   "default": true,
+   "severity": "error"
+  },
+  "D19": {
+   "group": "dims",
+   "default": true,
+   "severity": "info"
+  },
+  "D21": {
+   "group": "dims",
+   "default": true,
+   "severity": "warning"
+  },
+  "D22": {
+   "group": "dims",
+   "default": true,
+   "severity": "warning"
+  },
+  "D10": {
+   "group": "gentol",
+   "default": true,
+   "severity": "warning"
+  },
+  "P04": {
+   "group": "gentol",
+   "default": true,
+   "severity": "warning"
+  },
+  "P05": {
+   "group": "gentol",
+   "default": true,
+   "severity": "warning"
+  },
+  "D11": {
+   "group": "series",
+   "default": true,
+   "severity": "info"
+  },
+  "D17": {
+   "group": "series",
+   "default": true,
+   "severity": "info"
+  },
+  "D34": {
+   "group": "dims",
+   "default": true,
+   "severity": "error"
+  },
+  "D31": {
+   "group": "dims",
+   "default": true,
+   "severity": "warning"
+  },
+  "D32": {
+   "group": "dims",
+   "default": true,
+   "severity": "warning"
+  },
+  "D33": {
+   "group": "dims",
+   "default": true,
+   "severity": "warning"
+  },
+  "D29": {
+   "group": "series",
+   "default": true,
+   "severity": "info"
+  },
+  "D23": {
+   "group": "series",
+   "default": false,
+   "severity": "info"
+  },
+  "D15": {
+   "group": "threads",
+   "default": true,
+   "severity": "error"
+  },
+  "D26": {
+   "group": "threads",
+   "default": true,
+   "severity": "info"
+  },
+  "D27": {
+   "group": "threads",
+   "default": true,
+   "severity": "warning"
+  },
+  "D24": {
+   "group": "threads",
+   "default": true,
+   "severity": "error"
+  },
+  "D25": {
+   "group": "threads",
+   "default": true,
+   "severity": "warning"
+  },
+  "G01": {
+   "group": "gdt",
+   "default": true,
+   "severity": "error"
+  },
+  "G02": {
+   "group": "gdt",
+   "default": true,
+   "severity": "warning"
+  },
+  "G03": {
+   "group": "gdt",
+   "default": true,
+   "severity": "warning"
+  },
+  "G04": {
+   "group": "gdt",
+   "default": true,
+   "severity": "info"
+  },
+  "R01": {
+   "group": "rough",
+   "default": true,
+   "severity": "warning"
+  },
+  "R02": {
+   "group": "rough",
+   "default": true,
+   "severity": "info"
+  },
+  "R03": {
+   "group": "rough",
+   "default": false,
+   "severity": "info"
+  },
+  "D14": {
+   "group": "rough",
+   "default": true,
+   "severity": "warning"
+  },
+  "V01": {
+   "group": "views",
+   "default": true,
+   "severity": "warning"
+  },
+  "V02": {
+   "group": "views",
+   "default": true,
+   "severity": "error"
+  },
+  "V03": {
+   "group": "views",
+   "default": true,
+   "severity": "warning"
+  },
+  "V08": {
+   "group": "views",
+   "default": true,
+   "severity": "warning"
+  },
+  "V04": {
+   "group": "views",
+   "default": true,
+   "severity": "warning"
+  },
+  "V05": {
+   "group": "views",
+   "default": true,
+   "severity": "warning"
+  },
+  "V06": {
+   "group": "views",
+   "default": false,
+   "severity": "info"
+  },
+  "V07": {
+   "group": "views",
+   "default": false,
+   "severity": "info"
+  },
+  "D09": {
+   "group": "tt",
+   "default": true,
+   "severity": "warning"
+  },
+  "P07": {
+   "group": "tt",
+   "default": true,
+   "severity": "info"
+  },
+  "P01": {
+   "group": "tt",
+   "default": true,
+   "severity": "warning"
+  },
+  "P02": {
+   "group": "tt",
+   "default": true,
+   "severity": "info"
+  },
+  "P03": {
+   "group": "tt",
+   "default": true,
+   "severity": "info"
+  },
+  "P06": {
+   "group": "tt",
+   "default": true,
+   "severity": "info"
+  },
+  "N01": {
+   "group": "refs",
+   "default": true,
+   "severity": "warning"
+  },
+  "N02": {
+   "group": "refs",
+   "default": true,
+   "severity": "error"
+  },
+  "H01": {
+   "group": "heat",
+   "default": true,
+   "severity": "warning"
+  },
+  "H02": {
+   "group": "heat",
+   "default": true,
+   "severity": "error"
+  },
+  "H03": {
+   "group": "heat",
+   "default": true,
+   "severity": "info"
+  },
+  "H04": {
+   "group": "heat",
+   "default": true,
+   "severity": "warning"
+  },
+  "H05": {
+   "group": "heat",
+   "default": true,
+   "severity": "warning"
+  },
+  "H06": {
+   "group": "heat",
+   "default": true,
+   "severity": "warning"
+  },
+  "B07": {
+   "group": "material",
+   "default": true,
+   "severity": "warning"
+  },
+  "B13": {
+   "group": "material",
+   "default": true,
+   "severity": "warning"
+  },
+  "B14": {
+   "group": "material",
+   "default": true,
+   "severity": "error"
+  },
+  "M01": {
+   "group": "material",
+   "default": true,
+   "severity": "warning"
+  },
+  "M02": {
+   "group": "material",
+   "default": true,
+   "severity": "warning"
+  },
+  "M03": {
+   "group": "material",
+   "default": true,
+   "severity": "warning"
+  },
+  "Z01": {
+   "group": "gears",
+   "default": true,
+   "severity": "warning"
+  },
+  "Z07": {
+   "group": "gears",
+   "default": true,
+   "severity": "info"
+  },
+  "Z02": {
+   "group": "gears",
+   "default": true,
+   "severity": "warning"
+  },
+  "Z03": {
+   "group": "gears",
+   "default": true,
+   "severity": "error"
+  },
+  "Z04": {
+   "group": "gears",
+   "default": true,
+   "severity": "info"
+  },
+  "Z05": {
+   "group": "gears",
+   "default": true,
+   "severity": "warning"
+  },
+  "Z06": {
+   "group": "gears",
+   "default": true,
+   "severity": "info"
+  },
+  "K03": {
+   "group": "gears",
+   "default": true,
+   "severity": "error"
+  },
+  "K04": {
+   "group": "gears",
+   "default": true,
+   "severity": "warning"
+  },
+  "K01": {
+   "group": "elements",
+   "default": true,
+   "severity": "error"
+  },
+  "K02": {
+   "group": "elements",
+   "default": true,
+   "severity": "info"
+  },
+  "A05": {
+   "group": "assembly",
+   "default": true,
+   "severity": "warning"
+  },
+  "A01": {
+   "group": "assembly",
+   "default": true,
+   "severity": "warning"
+  },
+  "A02": {
+   "group": "assembly",
+   "default": true,
+   "severity": "error"
+  },
+  "A03": {
+   "group": "assembly",
+   "default": true,
+   "severity": "info"
+  },
+  "A06": {
+   "group": "assembly",
+   "default": true,
+   "severity": "info"
+  },
+  "A04": {
+   "group": "assembly",
+   "default": true,
+   "severity": "warning"
+  },
+  "A11": {
+   "group": "assembly",
+   "default": true,
+   "severity": "warning"
+  },
+  "A12": {
+   "group": "assembly",
+   "default": true,
+   "severity": "info"
+  },
+  "A07": {
+   "group": "assembly",
+   "default": true,
+   "severity": "warning"
+  },
+  "A08": {
+   "group": "assembly",
+   "default": true,
+   "severity": "error"
+  },
+  "A09": {
+   "group": "assembly",
+   "default": true,
+   "severity": "warning"
+  },
+  "A10": {
+   "group": "assembly",
+   "default": true,
+   "severity": "warning"
+  },
+  "A13": {
+   "group": "assembly",
+   "default": true,
+   "severity": "warning"
+  },
+  "A15": {
+   "group": "assembly",
+   "default": true,
+   "severity": "error"
+  },
+  "A16": {
+   "group": "assembly",
+   "default": true,
+   "severity": "warning"
+  },
+  "A17": {
+   "group": "assembly",
+   "default": true,
+   "severity": "warning"
+  },
+  "A14": {
+   "group": "assembly",
+   "default": true,
+   "severity": "warning"
+  },
+  "S01": {
+   "group": "spec",
+   "default": true,
+   "severity": "warning"
+  },
+  "S02": {
+   "group": "spec",
+   "default": true,
+   "severity": "warning"
+  },
+  "S03": {
+   "group": "spec",
+   "default": true,
+   "severity": "info"
+  },
+  "S04": {
+   "group": "spec",
+   "default": true,
+   "severity": "info"
+  },
+  "S05": {
+   "group": "spec",
+   "default": true,
+   "severity": "info"
+  },
+  "S06": {
+   "group": "spec",
+   "default": true,
+   "severity": "warning"
+  },
+  "S07": {
+   "group": "spec",
+   "default": true,
+   "severity": "info"
+  },
+  "S08": {
+   "group": "spec",
+   "default": true,
+   "severity": "warning"
+  },
+  "S09": {
+   "group": "spec",
+   "default": true,
+   "severity": "error"
+  },
+  "S10": {
+   "group": "spec",
+   "default": true,
+   "severity": "warning"
+  },
+  "S11": {
+   "group": "spec",
+   "default": true,
+   "severity": "warning"
+  },
+  "S12": {
+   "group": "spec",
+   "default": true,
+   "severity": "warning"
+  },
+  "S13": {
+   "group": "spec",
+   "default": true,
+   "severity": "warning"
+  },
+  "S14": {
+   "group": "spec",
+   "default": true,
+   "severity": "error"
+  },
+  "W01": {
+   "group": "welds",
+   "default": true,
+   "severity": "error"
+  },
+  "W02": {
+   "group": "welds",
+   "default": true,
+   "severity": "warning"
+  },
+  "W03": {
+   "group": "welds",
+   "default": true,
+   "severity": "warning"
+  },
+  "W04": {
+   "group": "welds",
+   "default": true,
+   "severity": "warning"
+  },
+  "W05": {
+   "group": "welds",
+   "default": true,
+   "severity": "warning"
+  },
+  "B00": {
+   "group": "title",
+   "default": true,
+   "severity": "info"
+  },
+  "B01": {
+   "group": "title",
+   "default": true,
+   "severity": "warning"
+  },
+  "B02": {
+   "group": "title",
+   "default": true,
+   "severity": "error"
+  },
+  "B03": {
+   "group": "title",
+   "default": true,
+   "severity": "warning"
+  },
+  "B15": {
+   "group": "title",
+   "default": true,
+   "severity": "error"
+  },
+  "B04": {
+   "group": "title",
+   "default": true,
+   "severity": "warning"
+  },
+  "B10": {
+   "group": "title",
+   "default": true,
+   "severity": "warning"
+  },
+  "B11": {
+   "group": "title",
+   "default": true,
+   "severity": "warning"
+  },
+  "B12": {
+   "group": "title",
+   "default": true,
+   "severity": "warning"
+  },
+  "B05": {
+   "group": "title",
+   "default": true,
+   "severity": "warning"
+  },
+  "B06": {
+   "group": "title",
+   "default": true,
+   "severity": "warning"
+  },
+  "B08": {
+   "group": "title",
+   "default": true,
+   "severity": "warning"
+  },
+  "B09": {
+   "group": "title",
+   "default": false,
+   "severity": "info"
+  },
+  "T01": {
+   "group": "tech",
+   "default": true,
+   "severity": "warning"
+  },
+  "T02": {
+   "group": "tech",
+   "default": true,
+   "severity": "warning"
+  },
+  "T03": {
+   "group": "tech",
+   "default": true,
+   "severity": "warning"
+  },
+  "T04": {
+   "group": "tech",
+   "default": true,
+   "severity": "warning"
+  },
+  "E01": {
+   "group": "erp",
+   "default": true,
+   "severity": "info"
+  },
+  "E02": {
+   "group": "erp",
+   "default": true,
+   "severity": "warning"
+  },
+  "E04": {
+   "group": "erp",
+   "default": true,
+   "severity": "error"
+  },
+  "E06": {
+   "group": "erp",
+   "default": true,
+   "severity": "error"
+  },
+  "E07": {
+   "group": "erp",
+   "default": true,
+   "severity": "error"
+  },
+  "E05": {
+   "group": "erp",
+   "default": true,
+   "severity": "warning"
+  },
+  "X00": {
+   "group": "dxf",
+   "default": true,
+   "severity": "info"
+  },
+  "X01": {
+   "group": "dxf",
+   "default": true,
+   "severity": "warning"
+  },
+  "X02": {
+   "group": "dxf",
+   "default": true,
+   "severity": "warning"
+  },
+  "X03": {
+   "group": "dxf",
+   "default": true,
+   "severity": "warning"
+  },
+  "X04": {
+   "group": "dxf",
+   "default": true,
+   "severity": "error"
+  },
+  "X05": {
+   "group": "dxf",
+   "default": true,
+   "severity": "info"
+  },
+  "F00": {
+   "group": "service",
+   "default": true,
+   "severity": "error"
+  },
+  "F01": {
+   "group": "service",
+   "default": true,
+   "severity": "info"
+  },
+  "F02": {
+   "group": "service",
+   "default": true,
+   "severity": "warning"
+  },
+  "F03": {
+   "group": "service",
+   "default": true,
+   "severity": "info"
+  },
+  "F04": {
+   "group": "service",
+   "default": true,
+   "severity": "warning"
+  },
+  "F05": {
+   "group": "service",
+   "default": true,
+   "severity": "error"
+  },
+  "F06": {
+   "group": "service",
+   "default": true,
+   "severity": "warning"
+  },
+  "F07": {
+   "group": "service",
+   "default": true,
+   "severity": "warning"
+  }
+ }
+}

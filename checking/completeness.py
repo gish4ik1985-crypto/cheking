@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import re
 
-from .textnorm import norm_designation
+from .textnorm import norm_designation, strip_doc_code
 
-NO_DRAWING_SECTIONS = re.compile(r"(?i)стандартн|прочи|материал|комплект(?!ы)|документац")
+NO_DRAWING_SECTIONS = re.compile(r"(?i)программн|стандартн|прочи|материал|комплект(?!ы)|документац")
 DRAWING_SECTIONS = re.compile(r"(?i)детал|сборочн|комплекс")
 
 
@@ -37,7 +37,7 @@ def completeness(spec, drawings: list) -> dict:
 
     index_des, index_sku = {}, {}
     for d in drawings:
-        if (d.get("kind") if isinstance(d, dict) else d.kind) == "spec":
+        if (d.get("kind") if isinstance(d, dict) else d.kind) in ("spec", "process"):
             continue                                   # сама спецификация — не чертёж
         des = get(d, "title", "designation") if isinstance(d, dict) else d.title.designation
         facts = d.get("facts", {}) if isinstance(d, dict) else d.facts
@@ -47,6 +47,7 @@ def completeness(spec, drawings: list) -> dict:
         for x in (des, facts.get("file_designation")):
             if x:
                 index_des.setdefault(norm_designation(x), rec)
+                index_des.setdefault(strip_doc_code(x), rec)          # «…001 СБ» закрывает позицию «…001»
         sku = facts.get("file_sku") or (facts.get("spec_item") or {}).get("sku")
         if sku:
             index_sku.setdefault(sku, rec)
@@ -58,7 +59,8 @@ def completeness(spec, drawings: list) -> dict:
             continue
         seen.add(key)
         need = needs_drawing(r)
-        hit = index_des.get(norm_designation(r.get("designation") or "")) if r.get("designation") else None
+        hit = (index_des.get(norm_designation(r.get("designation") or "")) or index_des.get(strip_doc_code(r["designation"]))
+               ) if r.get("designation") else None
         hit = hit or (index_sku.get(r.get("sku")) if r.get("sku") else None)
         if hit:
             c = hit["counts"]
@@ -77,6 +79,7 @@ def completeness(spec, drawings: list) -> dict:
         facts = d.get("facts", {}) if isinstance(d, dict) else d.facts
         fname = d.get("file") if isinstance(d, dict) else d.filename
         keys = {norm_designation(x) for x in (des, facts.get("file_designation")) if x}
+        keys |= {strip_doc_code(x) for x in (des, facts.get("file_designation")) if x}
         if facts.get("file_sku"):
             keys.add(facts["file_sku"])
         if not keys & spec_keys:

@@ -6,7 +6,7 @@ import math
 import re
 
 from .model import Drawing, ERROR, WARNING, INFO, CAT_GEAR
-from .normdata import MODULES_1, MODULES_2, SPLINE_MODULES, GEAR_FITS
+from .normdata import MODULES_1, MODULES_2, MODULES_REDUCER, SPLINE_MODULES, GEAR_FITS
 from .standards import fmtn
 from .textnorm import to_float
 
@@ -110,13 +110,13 @@ def check_gears(drw: Drawing, cfg: dict) -> None:
 
         m, z, d = _num(p.get("m")), _num(p.get("z")), _num(p.get("d"))
         if m:
-            series = SPLINE_MODULES if t["spline"] else MODULES_1 + MODULES_2
+            series = SPLINE_MODULES if t["spline"] else MODULES_1 + MODULES_2 + MODULES_REDUCER
             if not any(abs(m - x) < 1e-6 for x in series):
                 near = sorted(series, key=lambda x: abs(x - m))[:2]
                 drw.add(WARNING, "Z01", CAT_GEAR, f"Модуль {fmtn(m)} не из ряда {'ГОСТ 6033-80' if t['spline'] else 'ГОСТ 9563-60'} "
                         f"(ближайшие {', '.join(fmtn(x) for x in sorted(near))})", *where("m"),
                         "ГОСТ 6033-80" if t["spline"] else "ГОСТ 9563-60")
-            elif not t["spline"] and not any(abs(m - x) < 1e-6 for x in MODULES_1):
+            elif not t["spline"] and not any(abs(m - x) < 1e-6 for x in MODULES_1 + MODULES_REDUCER):
                 drw.add(INFO, "Z07", CAT_GEAR, f"Модуль {fmtn(m)} — из 2-го ряда ГОСТ 9563-60; 1-й ряд предпочтительнее",
                         *where("m"), "ГОСТ 9563-60")
         if not t["spline"]:

@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>06. Данные и интеграции</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<style>
+:root{--bg:#fff;--fg:#1f1f1c;--mut:#5f5e5a;--bd:#d9d7cf;--card:#f7f6f2;--link:#185fa5;--code:#efede6;
+--c-folder:#D85A30;--c-comp:#B77A1E;--c-bw:#1f1f1c;--c-spec:#3B6D11;--c-drw:#185FA5;--c-asm:#534AB7;--c-txt:#5F5E5A;--c-mk:#D4537E;--c-tp:#0F6E56;--c-err:#A32D2D;--c-ex:#854F0B;--c-mat:#854F0B;--c-srt:#5B6B7A}
+@media (prefers-color-scheme:dark){:root{--bg:#1b1b19;--fg:#ecebe5;--mut:#a9a79e;--bd:#3a3a36;--card:#252523;--link:#85B7EB;--code:#2d2d2a;
+--c-folder:#F0997B;--c-comp:#E3B15C;--c-bw:#ecebe5;--c-spec:#97C459;--c-drw:#85B7EB;--c-asm:#AFA9EC;--c-txt:#B4B2A9;--c-mk:#ED93B1;--c-tp:#5DCAA5;--c-err:#F09595;--c-ex:#EF9F27;--c-mat:#EF9F27;--c-srt:#B3BFCB}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:24px 16px 80px}
+h1{font-size:26px;margin:0 0 8px}h2{font-size:21px;margin:36px 0 8px;border-bottom:1px solid var(--bd);padding-bottom:4px}
+h3{font-size:17px;margin:26px 0 6px}h4{font-size:15px;margin:20px 0 6px}
+a{color:var(--link)}code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.88em}
+pre{background:var(--code);padding:12px;border-radius:8px;overflow:auto}
+table{border-collapse:collapse;width:100%;margin:10px 0;font-size:14px;display:block;overflow-x:auto}
+th,td{border:1px solid var(--bd);padding:6px 9px;text-align:left;vertical-align:top}th{background:var(--card)}
+ul,ol{padding-left:22px}
+.gal{margin:16px 0 24px;padding:14px;border:1px solid var(--bd);border-radius:12px;background:var(--card)}
+.gal h4{margin:16px 0 4px}.gal h4:first-child{margin-top:0}
+.gal p.n{margin:0 0 6px;color:var(--mut);font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(122px,1fr));gap:10px;margin:8px 0}
+.card{border:1px solid var(--bd);border-radius:12px;padding:10px 4px;text-align:center;background:var(--bg);font-size:12px;color:var(--mut);line-height:1.3}
+.tile{width:36px;height:36px;border-radius:8px;margin:0 auto 6px;display:flex;align-items:center;justify-content:center}
+.tile.round{border-radius:50%}
+.tile i{font-size:20px}.tile svg{width:22px;height:22px}
+.tile.missing{outline:2px dashed #c00}
+.tree{border:1px solid var(--bd);border-radius:12px;padding:10px 14px;background:var(--bg);font-size:14px}
+.tr{display:flex;align-items:center;gap:8px;padding:2px 0}
+.tr i{font-size:16px}.tr svg{width:16px;height:16px}
+.note{font-size:13px;color:var(--mut)}
+#warn{color:#c00;font-size:13px}
+.nav{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 18px;font-size:13px}
+.nav a{padding:3px 9px;border:1px solid var(--bd);border-radius:14px;text-decoration:none;color:var(--fg);background:var(--card)}
+.nav a.cur{background:var(--link);color:#fff;border-color:var(--link)}
+@media (prefers-color-scheme:dark){.nav a.cur{color:#111}}
+</style>
+</head>
+<body>
+<main>
+<nav class="nav"><a href="00_index.html">Содержание</a><a href="01_concept.html">Концепция и границы</a><a href="02_structure_versions.html">Состав, версии, справочники</a><a href="03_files_viewers.html">Файлы, чертежи и 3D</a><a href="04_changes.html">Внесение изменений</a><a href="05_approval_signatures.html">Согласование, подписи, нормоконтроль</a><a href="06_data_integrations.html" class="cur">Данные и интеграции</a><a href="07_nfr_acceptance.html">Нефункциональные требования, приёмка, этапы</a><a href="08_ui_icons.html">Интерфейс и пиктограммы</a><a href="09_as_is_gap.html">Сравнение с текущей реализацией</a><a href="10_fix_plan.html">План исправлений и открытые вопросы</a></nav>
+<div id="out"></div>
+<div id="warn"></div>
+</main>
+<template id="gallery"><div class="gal" id="gal"></div></template>
+<script id="md" type="text/markdown"># 06. Данные и интеграции
+
+## 1. Модель данных
+
+Состав первой версии. Названия сущностей рабочие.
+
+| Сущность | Основные поля |
+|---|---|
+| `Component` | id, обозначение, наименование, тип (сборочная единица или деталь), папка, держатель подлинников |
+| `ComponentVersion` | component_id, номер, состояние, период действия (от и до), литера, номера экземпляров, change_id |
+| `Document` | component_id, тип из справочника, порядок, обязательность |
+| `DocumentVersion` | document_id, номер, состояние, период действия, change_id, replaces_version_id |
+| `FileObject` | id, хэш содержимого, размер, формат, дата загрузки, автор |
+| `FileRef` | document_version_id, file_id, роль (исходный, вторичное представление, нейтральный формат) |
+| `Link` | parent_component_id, child_component_id, тип связи, количество, позиция, раздел |
+| `Material`, `Assortment` | справочные записи с атрибутами и ГОСТ |
+| `Lock` | объект, владелец, время взятия, срок |
+| `Variant` | document_version_id, имя варианта, автор, выбран ли |
+| `Change` | вид (ИИ, ПИ, ПР, ДИ, ДПИ), номер, состояние, источник, причина, срок, автор, держатель подлинников |
+| `ChangeItem` | change_id, объект, действие (создать версию, аннулировать, сменить статус), прежняя и новая версии |
+| `ChangeContent` | change_id, объект или общее, блоки: текст, изображение, комментарий |
+| `ImpactDecision` | change_id, затронутый родитель, решение (не затрагивается, пересмотреть, новая версия), обоснование, автор, дата |
+| `LinkRule` | исходный тип, действие, обязательный связанный объект, уровень (обязательно, предупреждение, справочно) |
+| `DocumentType` | группа, применимость, обязательность, форматы, значок, порядок |
+| `Workflow`, `Stage`, `Task` | шаблон, стадии с ХР, задания и их состояния |
+| `Signature` | версия, пользователь, ХР, вид подписи, время, контрольная сумма |
+| `InfoSheet` | информационно-удостоверяющий лист: обозначение, вид, код, дата, листов |
+| `CheckRun`, `Finding` | запуск проверки, версия, замечания (код, текст, уровень), связь с `Change` |
+| `Notification` | событие, адресат, канал, статус |
+| `Numerator` | префикс, область, текущее значение |
+| `Attribute`, `AttributeValue` | определения и значения атрибутов |
+| `AuditLog` | кто, когда, что, до и после |
+| `User`, `Role`, `Permission` | пользователи, роли, права по типам и состояниям |
+
+Принципы данных:
+- версии неизменяемы после утверждения, состояния меняются только по правилам переходов;
+- связи состава ссылаются на компонент, не на версию;
+- журнал аудита неизменяем;
+- все справочники (типы документов, значки, правила взаимосвязи, нумераторы) хранятся в данных и редактируются без кода.
+
+## 2. Интеграции
+
+Принцип: прикладные системы обмениваются через модуль. Прямой обмен между САПР, ERP и MES запрещён, чтобы сохранять целостность данных.
+
+| Система | Что обмениваем | Направление |
+|---|---|---|
+| КОМПАС-3D | Состав, свойства, основная надпись, чертежи, модели | Модуль ⇄ КОМПАС (часть 03) |
+| ERP, 1С | Состав изделия, обозначения, нормы, материалы | Модуль → ERP, сверка в обе стороны |
+| MES | Технология, маршруты, нормы | Модуль → MES |
+| Почта | Уведомления | Модуль → почта |
+| Каталог пользователей (AD, LDAP) | Учётные записи, подразделения, группы | Каталог → модуль |
+| ЛОЦМАН:PLM | Импорт и экспорт, если потребуется параллельная эксплуатация | Двусторонний, по необходимости |
+
+Для обмена вводится слой унификации: общие термины, типы данных, единицы измерения, обнаружение конфликтов обмена и обновления, возможность их разбора и исправления. Модели обмена настраиваются, а не пишутся кодом.
+
+| № | Требование |
+|---|---|
+| INT-01 | Единый слой интеграции: сопоставление терминов, типов и единиц измерения. |
+| INT-02 | Обнаружение и разбор конфликтов обмена, журнал обмена. |
+| INT-03 | Настройка моделей обмена без изменения кода. |
+| INT-04 | Интеграция с каталогом пользователей. |
+| INT-05 | Выгрузка состава и атрибутов в ERP, формат согласуется. |
+| INT-06 | Открытый API модуля для внешних систем с правами и журналом. |
+
+## 3. Миграция
+
+В методологии отдельного описания миграции нет. Единственный близкий подход: проект ввода применяемости, когда ранее утверждённым документам назначают применяемость в рамках проекта ввода системы. Для нас предлагается следующий порядок.
+
+1. Инвентаризация: список существующих документов (PDF чертежей, 3D с сервера, спецификации, МК, ТП, эксплуатационные).
+2. Сопоставление: определение компонента по обозначению, привязка документов к компонентам по правилам именования.
+3. Присвоение начальных версий 1.0 и состояний (по умолчанию «Архив», действующая). Период действия открывается датой миграции или фактической датой утверждения, если она известна.
+4. Построение состава из спецификаций и сверка с Excel.
+5. Отчёт о несопоставленных и неоднозначных документах, разбор вручную.
+6. Параллельная эксплуатация, пока тестеры работают на старой версии (обратная совместимость по `docs/MIGRATION.md`).
+
+| № | Требование |
+|---|---|
+| MIG-01 | Пакетная загрузка существующих документов с сопоставлением по обозначению. |
+| MIG-02 | Начальные версии и состояния, периоды действия, назначение применяемости. |
+| MIG-03 | Построение состава из спецификаций и сверка с внешним источником. |
+| MIG-04 | Отчёт о несопоставленных и конфликтных документах. |
+| MIG-05 | Сохранение кодов и текстов замечаний прежней версии (обратная совместимость). |
+</script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+var P={
+folder:{bg:'#FAECE7',fg:'#993C1D'},
+comp:{bg:'#F6DCA8',bd:'#E0B66A',fg:'#8A5A12'},
+bw:{bg:'#FFFFFF',bd:'#2C2C2A',fg:'#000000'},
+spec:{bg:'#EAF3DE',fg:'#27500A'},
+drw:{bg:'#E6F1FB',fg:'#0C447C'},
+asm:{bg:'#EEEDFE',fg:'#3C3489'},
+txt:{bg:'#F1EFE8',fg:'#444441'},
+mk:{bg:'#FBEAF0',fg:'#72243E'},
+tp:{bg:'#E1F5EE',fg:'#085041'},
+err:{bg:'#FCEBEB',fg:'#791F1F'},
+ex:{bg:'#FAEEDA',fg:'#633806'},
+mat:{bg:'#FAEEDA',fg:'#633806',round:1},
+srt:{bg:'#DDE5EE',fg:'#2B4258',round:1}
+};
+function svgIcon(id,color){
+  if(id==='ibeam'){
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v3.5h-5.5v9H19V20H5v-3.5h5.5v-9H5z"/></svg>';
+  }
+  if(id==='mill'){
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v6H9zM9 9h6v8l-2 4h-2l-2-4z"/><path d="M9 12.5l6-2M9 16l6-2"/></svg>';
+  }
+  return '';
+}
+function ico(icon,color){
+  if(icon.indexOf('svg:')===0)return svgIcon(icon.slice(4),color);
+  return '<i class="ti ti-'+icon+'" style="color:'+color+'"></i>';
+}
+var missing=[];
+function tile(key,icon,label){
+  var p=P[key],st='background:'+p.bg+';'+(p.bd?'border:1px solid '+p.bd+';':'');
+  return '<div class="card"><div class="tile'+(p.round?' round':'')+'" data-i="'+icon+'" style="'+st+'">'+ico(icon,p.fg)+'</div>'+label+'</div>';
+}
+function section(title,note,items){
+  return '<h4>'+title+'</h4>'+(note?'<p class="n">'+note+'</p>':'')+'<div class="grid">'+items.map(function(i){return tile(i[0],i[1],i[2])}).join('')+'</div>';
+}
+function row(depth,key,icon,text){
+  return '<div class="tr" style="padding-left:'+(depth*20)+'px">'+ico(icon,'var(--c-'+key+')')+'<span>'+text+'</span></div>';
+}
+function buildGallery(){
+  var h='';
+  h+='<p class="note">Так значки выглядят на самом деле. Красная пунктирная рамка вокруг плашки означает, что такого значка нет в используемом шрифте, нужна замена.</p>';
+  h+=section('Утверждённые: компоненты и документы','Плашка 36 px (карточки, заголовки, списки).',[
+   ['folder','folder','Папка'],['comp','packages','Сборочная единица'],['comp','cube','Деталь'],
+   ['bw','packages','3D-модель сборочной единицы'],['bw','cube','3D-модель детали'],
+   ['spec','list-details','Спецификация'],['drw','ruler-2','Чертёж детали'],['asm','ruler-measure','Сборочный чертёж'],
+   ['txt','file-text','Текстовый документ'],['mk','route','Маршрутная карта'],['tp','settings','Техпроцесс'],['err','alert-triangle','Замечание']]);
+  h+=section('Предложено: справочные записи','Круглая плашка: это не документ, а справочная запись. Двутавр и фреза нарисованы вручную.',[
+   ['mat','stack-2','Материал'],['srt','svg:ibeam','Сортамент (двутавр)']]);
+  h+=section('Предложено: эксплуатационная документация','Янтарная плашка. Проверить, что цвет не сливается с песочным у компонентов.',[
+   ['ex','books','Группа «Эксплуатационная документация»'],['ex','book-2','Руководство по эксплуатации'],['ex','certificate','Паспорт, формуляр'],
+   ['ex','tools','ЗИП, каталог деталей'],['ex','nut','Ремонтные, монтажные документы'],['ex','list-check','Ведомость эксплуатационных документов']]);
+  h+=section('Предложено: виды операций','Бирюзовая гамма в техпроцессе, розовая в маршрутной карте. Вид уточняется текстом («010 Токарная»).',[
+   ['tp','cut','Заготовительная (резка, рубка)'],['tp','svg:mill','Механообработка резанием (токарная, фрезерная, сверлильная, шлифовальная)'],
+   ['tp','hammer','Ковка, штамповка, гибка'],['tp','tool','Слесарная'],['tp','bolt','Сварка, пайка'],['tp','flame','Термическая'],
+   ['tp','droplet','Мойка, гальваника, химобработка'],['tp','brush','Окраска, покрытие'],['tp','components','Сборочная'],['tp','plug','Электромонтажная'],
+   ['tp','activity','Испытания, регулировка'],['tp','clipboard-check','Контрольная'],['tp','box','Упаковка, консервация'],['tp','help-circle','Прочая']]);
+  h+=section('Предложено: вложенные элементы техпроцесса',null,[
+   ['tp','arrow-narrow-right','Переход'],['tp','lock','Установ'],['tp','layout-grid','Позиция'],['tp','engine','Оборудование'],
+   ['tp','puzzle','Приспособление, оснастка'],['tp','scissors','Режущий инструмент'],['tp','gauge','Измерительный инструмент'],['tp','tools','Вспомогательный инструмент'],
+   ['tp','flask','Материалы: СОЖ, припой, электроды'],['tp','adjustments-horizontal','Режимы обработки'],['tp','stopwatch','Нормы времени'],['tp','user-check','Профессия, разряд'],
+   ['tp','code','Программа ЧПУ'],['tp','photo','Операционный эскиз'],['tp','shield-check','Требования безопасности'],['tp','notes','Технологические указания']]);
+  h+=section('Предложено: вложенные элементы маршрутной карты',null,[
+   ['mk','timeline','Маршрут'],['mk','building-factory-2','Цех, участок'],['mk','package','Заготовка'],['mk','list-details','Материалы и комплектующие на изделие'],
+   ['mk','truck','Транспортировка, склад'],['mk','user-check','Исполнитель, разряд'],['mk','stopwatch','Норма времени'],['mk','file-text','Примечание']]);
+  h+='<h4>Дерево состава, пример (значки 16 px)</h4><div class="tree">'+[
+   [0,'folder','folder','Проект «Стенд нагрузочный»'],
+   [1,'comp','packages','Редуктор — сборочная единица'],
+   [2,'spec','list-details','Спецификация'],
+   [2,'bw','packages','3D-модель сборочной единицы'],
+   [2,'asm','ruler-measure','Сборочный чертёж'],
+   [2,'ex','books','Эксплуатационная документация'],
+   [3,'ex','book-2','Руководство по эксплуатации'],
+   [3,'ex','certificate','Паспорт'],
+   [3,'ex','tools','Каталог деталей и ЗИП'],
+   [2,'comp','packages','Узел вала — сборочная единица'],
+   [3,'comp','cube','Вал-шестерня — деталь'],
+   [4,'bw','cube','3D-модель детали'],
+   [4,'drw','ruler-2','Чертёж детали'],
+   [4,'mat','stack-2','Материал: Сталь 40Х ГОСТ 4543'],
+   [4,'srt','svg:ibeam','Сортамент: Балка 20Б1 ГОСТ 26020'],
+   [4,'mk','route','Маршрутная карта'],
+   [5,'mk','building-factory-2','Цех 3, участок токарный'],
+   [6,'mk','cut','005 Заготовительная'],
+   [6,'mk','svg:mill','010 Токарная'],
+   [6,'mk','flame','015 Термическая'],
+   [6,'mk','clipboard-check','020 Контрольная'],
+   [4,'tp','settings','Техпроцесс'],
+   [5,'tp','svg:mill','010 Токарная'],
+   [6,'tp','lock','Установ А'],
+   [7,'tp','arrow-narrow-right','Переход 1: точить поверхность'],
+   [7,'tp','scissors','Резец проходной'],
+   [7,'tp','adjustments-horizontal','Режимы: n, S, t'],
+   [6,'tp','engine','Станок 16К20'],
+   [6,'tp','puzzle','Патрон трёхкулачковый'],
+   [2,'txt','file-text','Пояснительная записка — текстовый документ'],
+   [2,'err','alert-triangle','Замечание']
+  ].map(function(r){return row(r[0],r[1],r[2],r[3])}).join('')+'</div>';
+  return h;
+}
+function checkMissing(root){
+  var bad=[];
+  root.querySelectorAll('.tile[data-i]').forEach(function(t){
+    var n=t.getAttribute('data-i');
+    if(n.indexOf('svg:')===0)return;
+    var i=t.querySelector('i');
+    var c=getComputedStyle(i,'::before').content;
+    if(!c||c==='none'||c==='normal'){t.classList.add('missing');bad.push(n)}
+  });
+  if(bad.length)document.getElementById('warn').textContent='Не найдены в шрифте: '+bad.join(', ');
+}
+var md=document.getElementById('md').textContent;
+var out=document.getElementById('out');
+out.innerHTML=marked.parse(md);
+var h3s=out.querySelectorAll('h2,h3');
+for(var k=0;k<h3s.length;k++){
+  if(h3s[k].textContent.indexOf('Пиктограммы объектов')>=0){
+    var g=document.createElement('div');g.className='gal';g.innerHTML=buildGallery();
+    h3s[k].parentNode.insertBefore(g,h3s[k].nextSibling);break;
+  }
+}
+out.querySelectorAll('code.language-mermaid').forEach(function(c){
+  var d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentNode.replaceWith(d);
+});
+if(window.mermaid){mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme:dark)').matches?'dark':'default'});mermaid.run({querySelector:'.mermaid'});}
+function go(){document.fonts.ready.then(function(){setTimeout(function(){checkMissing(out)},400)})}
+go();
+</script>
+</body>
+</html>

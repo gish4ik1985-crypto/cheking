@@ -22,8 +22,8 @@ from .textnorm import norm_designation, to_float
 STEEL = 7850e-9                      # кг/мм³
 CELL, BRIDGE = 2.0, 2                # сетка 2 мм; линии ближе 4 мм — одно изображение
 STD_TB = "ГОСТ Р 2.104-2023"
-STD_SB = "ГОСТ 2.109-73"
-STD_SP = "ГОСТ 2.106-96"
+STD_SB = "Сверка масс (требования в стандарте нет)"
+STD_SP = "ГОСТ Р 2.106-2019"
 DOC_CODE = re.compile(r"\s*(СБ|МЧ|ВО|ГЧ|ТЧ|МЭ|ЭСБ)\s*$")
 SKU = re.compile(r"\d{3}-\d{6}")
 NO_MASS = ("Документация", "Комплекты")
@@ -194,7 +194,7 @@ def _label(c: dict) -> str:
 def check_job(drawings: list, spec=None) -> set[int]:
     """Сверка документов одной проверки. Возвращает номера чертежей, к которым добавлены замечания."""
     changed: set[int] = set()
-    docs = [(i, d) for i, d in enumerate(drawings) if d.kind != "spec" and not d.error]
+    docs = [(i, d) for i, d in enumerate(drawings) if d.kind not in ("spec", "process") and not d.error]
     index: dict[str, int] = {}
     for i, d in docs:
         for k in _keys(d):
@@ -241,7 +241,7 @@ def check_job(drawings: list, spec=None) -> set[int]:
                         d.add(ERROR if (w1 != w2 and mass_diff) else WARNING, "A17", CAT_ASM,
                               f"Обозначение «{c['designation'] or c['sku']}»: в спецификации {d0.title.designation} — "
                               f"«{c0['name']}», здесь ({_label(c)}) — «{c['name']}»{m_txt}. Одно обозначение "
-                              f"присвоено разным изделиям", c["page"], c["bbox"], "ГОСТ 2.201-80")
+                              f"присвоено разным изделиям", c["page"], c["bbox"], "ГОСТ Р 2.201-2023 п. 4.3")
                 else:
                     first[key] = (d, c)
             m_spec = c.get("spec_mass")

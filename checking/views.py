@@ -1,4 +1,4 @@
-"""Изображения и буквенные обозначения (ГОСТ 2.305-2008, ГОСТ 2.316-2008 пп. 4.17–4.18, ГОСТ 2.302-68)
+"""Изображения и буквенные обозначения (ГОСТ 2.305-2008, ГОСТ Р 2.316-2023 пп. 5.9–5.10, ГОСТ 2.302-68)
 и рамки допусков формы и расположения (ГОСТ 2.308-2011, ГОСТ 24643-81)."""
 from __future__ import annotations
 
@@ -6,14 +6,14 @@ import re
 from collections import Counter
 
 from .model import Drawing, TextLine, ERROR, WARNING, INFO, CAT_DIM, CAT_VIEW, CAT_GDT
-from .normdata import (FORBIDDEN_LETTERS, FORBIDDEN_LATIN, CYR_ALPHABET, SCALES, GDT_SERIES_UM, GDT_KIND,
+from .normdata import (FORBIDDEN_LETTERS, FORBIDDEN_LATIN, CYR_ALPHABET, SCALES, scale_ok, GDT_SERIES_UM, GDT_KIND,
                        GDT_NEEDS_BASE)
 from .standards import fmtn
 from .textnorm import to_float
 from .titleblock import excluded
 
 STD_VIEWS = "ГОСТ 2.305-2008"
-STD_LETTERS = "ГОСТ 2.316-2008"
+STD_LETTERS = "ГОСТ Р 2.316-2023 п. 5.9"
 STD_GDT = "ГОСТ 2.308-2011"
 
 LETTER = r"[А-ЯЁA-Z]\d?"
@@ -82,7 +82,17 @@ def collect(drw: Drawing) -> dict:
         elif (_isolated(ln, drw.lines) and not re.fullmatch(r"[MМ]\d", t)
               and not _table_value(ln, [x for x in labels_txt if _similar(x, ln)])):
             marks.append({"letter": m.group("a"), "line": ln})
+    # буквы у выноски маркирования «п.3» («Ч», «г» — ГОСТ 2.314-68, прил. 1) — не обозначения изображений
+    pn = [ln for ln in pool if re.fullmatch(r"п\.?\s*\d+(?:\s*[,и]\s*\d+)*", ln.text.strip(), re.I)]
+    marks = [x for x in marks if not any(_close(x["line"], p, 25) for p in pn)]
     return {"sections": sections, "views": views, "marks": marks, "frames": frames}
+
+
+def _close(a, b, dist: float) -> bool:
+    """Центры рамок двух надписей ближе dist (мм)."""
+    ax, ay = (a.bbox[0] + a.bbox[2]) / 2, (a.bbox[1] + a.bbox[3]) / 2
+    bx, by = (b.bbox[0] + b.bbox[2]) / 2, (b.bbox[1] + b.bbox[3]) / 2
+    return a.page == b.page and (ax - bx) ** 2 + (ay - by) ** 2 <= dist * dist
 
 
 def _dim_size(drw: Drawing) -> float | None:
@@ -113,7 +123,7 @@ def check_views(drw: Drawing, cfg: dict) -> None:
     # масштаб изображения
     for x in c["sections"] + c["views"]:
         sc = (x["scale"] or "").replace(" ", "")
-        if sc and sc not in SCALES and re.fullmatch(r"\d+(?:,\d+)?:\d+(?:,\d+)?", sc):
+        if sc and not scale_ok(sc) and re.fullmatch(r"\d+(?:,\d+)?:\d+(?:,\d+)?", sc):
             ln = x["line"]
             drw.add(WARNING, "V05", CAT_VIEW, f"Масштаб «{sc}» в надписи «{ln.text.strip()}» не из ряда ГОСТ 2.302-68",
                     ln.page, ln.bbox, "ГОСТ 2.302-68")
@@ -132,9 +142,10 @@ def check_views(drw: Drawing, cfg: dict) -> None:
         ch = letter[0]
         if (ch in FORBIDDEN_LETTERS or ch in FORBIDDEN_LATIN) and ch not in reported:
             reported.add(ch)
+            latin = ", V, X" if ch in "VX" else ""
             drw.add(WARNING, "V01", CAT_VIEW, f"Буква «{ch}» в обозначении «{ln.text.strip()}» не применяется "
-                    f"(исключены Ё, З, Й, О, Ч, Х, Ъ, Ы, Ь и латинские I, O)", ln.page, ln.bbox,
-                    "ГОСТ 2.316-2008 п. 4.17")
+                    f"(исключены Ё, З, Й, О, Ч, Х, Ъ, Ы, Ь и латинские I, O{latin})", ln.page, ln.bbox,
+                    "ГОСТ Р 2.316-2023 п. 5.9")
     # обозначение на изображении у разрезов и выносных элементов
     for x in c["sections"] + c["views"]:
         letter = x["letter"]
@@ -202,12 +213,12 @@ def check_views(drw: Drawing, cfg: dict) -> None:
         missing = [ch for ch in expected if ch not in letters]
         if missing:
             drw.add(INFO, "V06", CAT_VIEW, f"Буквенные обозначения с пропусками: использованы "
-                    f"{', '.join(letters)}; пропущены {', '.join(missing)}", None, None, "ГОСТ 2.316-2008 п. 4.17")
+                    f"{', '.join(letters)}; пропущены {', '.join(missing)}", None, None, "ГОСТ Р 2.316-2023 п. 5.9")
     if big:
         for x in c["sections"] + c["views"]:
             ln = x["line"]
             if ln.size < 1.35 * big:
                 drw.add(INFO, "V07", CAT_VIEW, f"Надпись «{ln.text.strip()}»: шрифт буквенного обозначения "
                         f"({fmtn(round(ln.size, 1))}) должен быть примерно вдвое больше размерных чисел "
-                        f"({fmtn(round(big, 1))})", ln.page, ln.bbox, "ГОСТ 2.316-2008 п. 4.18")
+                        f"({fmtn(round(big, 1))})", ln.page, ln.bbox, "ГОСТ Р 2.316-2023 п. 5.10")
                 break

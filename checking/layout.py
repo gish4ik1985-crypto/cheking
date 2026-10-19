@@ -124,7 +124,7 @@ def check_layout(drw: Drawing, cfg: dict) -> None:
                 continue
             seen.add(key)
             drw.add(WARNING, "D31", CAT_DIM, f"Надписи «{ta[:40]}» и «{tb[:40]}» наложены друг на друга — "
-                    f"их нужно разнести", a.page, a.bbox, STD)
+                    f"их нужно разнести", a.page, a.bbox, "ГОСТ 2.307-2011 п. 5.31")
 
     # --- D32/D33: расстояния ---
     hor, ver = _lines_of(drw, drw.first_page)
@@ -142,7 +142,7 @@ def check_layout(drw: Drawing, cfg: dict) -> None:
         if len(ls) == 2 and min(ls) + 2.0 < MIN_CONTOUR - TOL:
             drw.add(WARNING, "D32", CAT_DIM, f"Размер «{d.raw.strip()}»: размерная линия на расстоянии ≈{min(ls) + 2:.0f} мм от "
                     f"контура — должно быть не менее {MIN_CONTOUR:.0f} мм (выносные линии {min(ls):.1f} мм)",
-                    d.page, d.bbox, STD)
+                    d.page, d.bbox, "ГОСТ 2.307-2011 п. 5.11")
     flagged = set()
     for i, (d, (pos, (a, b), _, ln)) in enumerate(found):
         for e, (pos2, (a2, b2), _, ln2) in found[i + 1:]:
@@ -154,5 +154,5 @@ def check_layout(drw: Drawing, cfg: dict) -> None:
                 flagged.add((d.page, round(pos), round(pos2)))
                 drw.add(WARNING, "D33", CAT_DIM, f"Размерные линии «{d.raw.strip()}» и «{e.raw.strip()}» расположены на "
                         f"расстоянии {gap:.1f} мм — между параллельными размерными линиями должно быть не менее "
-                        f"{MIN_PARALLEL:.0f} мм", d.page, d.bbox, STD)
+                        f"{MIN_PARALLEL:.0f} мм", d.page, d.bbox, "ГОСТ 2.307-2011 п. 5.11")
     drw.facts["dimlines"] = len(found)

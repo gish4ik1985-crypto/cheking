@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Проверка чертежей</title>
-<link rel="stylesheet" href="/static/style.css?v=20261012">
+<link rel="stylesheet" href="/static/style.css?v=20261015">
 </head>
 <body>
 <div class="topbar">
@@ -14,7 +14,7 @@
     <div class="muted">Размеры, допуски и посадки · технологичность · ТТ · масса · сверка со спецификацией / ERP</div>
   </div>
   <div class="spacer"></div>
-  <a class="btn" href="/admin" title="Какие проверки по ГОСТам выполнять">Настройки</a>
+  
 </div>
 
 <div class="wrap">
@@ -22,10 +22,11 @@
     <h2>1. Чертежи</h2>
     <div id="drop" class="drop">
       <strong>Перетащите сюда файлы или папку — или нажмите, чтобы выбрать</strong>
-      <span class="muted">PDF (векторные и сканы), КОМПАС .cdw, Solid Edge .dft, PNG/JPG/TIF, ZIP-архив. DXF-развёртки кладите сюда же — сверятся с чертежами</span>
+      <span class="muted">PDF (векторные и сканы), PNG/JPG/TIF, ZIP-архив. DXF-развёртки кладите сюда же — сверятся с чертежами</span>
     </div>
-    <input id="files" type="file" multiple hidden accept=".pdf,.cdw,.spw,.frw,.dft,.dxf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.zip">
+    <input id="files" type="file" multiple hidden accept=".pdf,.dxf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.zip">
     <ul id="filelist" class="filelist"></ul>
+    <div id="dupnote" class="hint"></div>
     <div style="margin-top:14px">
       <label class="field" for="folder">…или путь к папке на этом компьютере</label>
       <input id="folder" type="text" placeholder="D:\КД\Опора пассивная">
@@ -34,18 +35,32 @@
   </form>
 
   <div class="card">
-    <h2>2. Спецификация или выгрузка ERP <span class="muted" style="font-weight:400">(необязательно)</span></h2>
+    <h2>2. Спецификации <span class="muted" style="font-weight:400">(необязательно)</span></h2>
     <div class="row">
       <div>
-        <input id="spec" type="file" accept=".xlsx,.xlsm,.xls">
-        <div class="hint">СП из ERP (шаблон СП / табличный экспорт) или отчёт спецификации КОМПАС. По ней сверяются масса,
-          наименование, материал, марка и толщина листа, и строится комплектность: каких чертежей не хватает.</div>
+        <input id="spec" type="file" multiple accept=".xlsx,.xlsm,.xls,.pdf">
+        <div class="hint"><b>Спецификация в PDF</b> (по форме 1 ГОСТ 2.106) — прикладывайте вместе со
+          сборочным чертежом: программа найдёт его по обозначению, сверит номера позиций, наименования и составные части,
+          а саму таблицу проверит по ГОСТ 2.106. Можно несколько спецификаций сразу.<br>
+          <b>Excel</b> (СП из ERP, табличный экспорт): сверяются масса, наименование, материал, марка и
+          толщина листа с чертежами, номера позиций, наименования и количество — со спецификацией в PDF; строится
+          комплектность: каких чертежей не хватает.</div>
+        <ul id="speclist" class="filelist"></ul>
       </div>
       <div>
         <label class="check"><input id="ocr" type="checkbox" checked> Распознавать сканы (OCR, локально)</label>
         <div class="hint">Около 10 с на лист. Без интернета и без внешних сервисов.</div>
       </div>
     </div>
+  </div>
+
+  <div class="card">
+    <h2>3. Маршрутные карты и техпроцессы <span class="muted" style="font-weight:400">(необязательно)</span></h2>
+    <input id="proc" type="file" multiple accept=".pdf,.xlsx,.xlsm,.xls,.docx">
+    <div class="hint">PDF (текст или скан), Excel, Word. Программа определяет вид документа (маршрутная карта, операционная
+      карта, техпроцесс…), обозначение детали и список операций и связывает документ с чертежом детали. Правил проверки
+      технологии пока нет — документы показываются в отчёте.</div>
+    <ul id="proclist" class="filelist"></ul>
   </div>
 
   <div class="card">
@@ -67,6 +82,17 @@
 const drop = document.getElementById('drop'), input = document.getElementById('files');
 const list = document.getElementById('filelist');
 let picked = [];
+// один и тот же файл (имя, размер, дата изменения) в проверку добавляется один раз — во всех трёх списках
+const fkey = f => `${f.name}|${f.size}|${f.lastModified}`;
+function addUnique(list, files) {
+  const skipped = [];
+  for (const f of files) {
+    if ([...picked, ...specs, ...procs].some(x => fkey(x) === fkey(f))) skipped.push(f.name);
+    else list.push(f);
+  }
+  const note = document.getElementById('dupnote');
+  note.textContent = skipped.length ? 'Пропущен дубликат: ' + [...new Set(skipped)].join(', ') : '';
+}
 
 function render() {
   list.innerHTML = '';
@@ -77,8 +103,20 @@ function render() {
     list.appendChild(li);
   });
 }
+let specs = [], procs = [];
+function renderExtra(listId, arr) {
+  const ul = document.getElementById(listId); ul.innerHTML = '';
+  arr.forEach((f, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${f.name}</span><span class="muted">${(f.size/1024).toFixed(0)} КБ <button title="Убрать">×</button></span>`;
+    li.querySelector('button').onclick = () => { arr.splice(i, 1); renderExtra(listId, arr); };
+    ul.appendChild(li);
+  });
+}
+document.getElementById('spec').onchange = ev => { addUnique(specs, [...ev.target.files]); ev.target.value = ''; renderExtra('speclist', specs); };
+document.getElementById('proc').onchange = ev => { addUnique(procs, [...ev.target.files]); ev.target.value = ''; renderExtra('proclist', procs); };
 drop.onclick = () => input.click();
-input.onchange = () => { picked.push(...input.files); input.value = ''; render(); };
+input.onchange = () => { addUnique(picked, [...input.files]); input.value = ''; render(); };
 ['dragenter', 'dragover'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('over'); }));
 ['dragleave', 'drop'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('over'); }));
 
@@ -100,8 +138,8 @@ async function walk(entry, path) {
 drop.addEventListener('drop', async ev => {
   const items = [...(ev.dataTransfer.items || [])];
   if (items.length && items[0].webkitGetAsEntry) {
-    for (const it of items) { const e = it.webkitGetAsEntry(); if (e) picked.push(...await walk(e, '')); }
-  } else picked.push(...ev.dataTransfer.files);
+    for (const it of items) { const e = it.webkitGetAsEntry(); if (e) addUnique(picked, await walk(e, '')); }
+  } else addUnique(picked, [...ev.dataTransfer.files]);
   render();
 });
 
@@ -111,8 +149,8 @@ document.getElementById('go').onclick = async ev => {
   const fd = new FormData();
   picked.forEach(f => fd.append('files', f, f.name));
   fd.append('folder', document.getElementById('folder').value);
-  const spec = document.getElementById('spec').files[0];
-  if (spec) fd.append('spec', spec);
+  specs.forEach(f => fd.append('spec', f, f.name));
+  procs.forEach(f => fd.append('process', f, f.name));
   fd.append('ocr', document.getElementById('ocr').checked ? '1' : '0');
   const btn = document.getElementById('go'); btn.disabled = true;
   document.getElementById('prog').style.display = 'block';
@@ -148,5 +186,6 @@ fetch('/api/history').then(r => r.json()).then(h => {
   }).join('');
 });
 </script>
+<script src="/static/user.js"></script>
 </body>
 </html>

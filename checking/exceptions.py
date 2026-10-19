@@ -12,10 +12,10 @@ import threading
 import time
 import uuid
 
-from .config import ROOT
+from .config import DATA
 from .textnorm import norm_designation
 
-PATH = os.path.join(ROOT, "exceptions.json")
+PATH = os.path.join(DATA, "exceptions.json")
 _LOCK = threading.Lock()
 
 

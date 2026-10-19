@@ -11,9 +11,25 @@ from .model import Drawing, ERROR, WARNING, INFO, CAT_SPEC
 from .standards import fmtn
 from .textnorm import norm_designation
 
-STD = "ГОСТ 2.106-96"
-SECTIONS = ["Документация", "Комплексы", "Сборочные единицы", "Детали", "Стандартные изделия", "Прочие изделия",
-            "Материалы", "Комплекты"]
+STD = "ГОСТ Р 2.106-2019"
+SECTIONS = ["Документация", "Комплексы", "Сборочные единицы", "Детали", "Программные изделия и базы данных",
+            "Стандартные изделия", "Прочие изделия", "Материалы", "Комплекты"]
+# графа «Кол.» необязательна (ГОСТ Р 2.106-2019, табл. 4.1): у документации не заполняют, у программных и прочих изделий по желанию
+QTY_OPTIONAL = ("Документация", "Программные изделия и базы данных", "Прочие изделия")
+QTY_MARK = re.compile(r"(?i)(?<![а-яё])(?:техн|приб)")      # «Техн.» / «Приб.» вместо числа у материалов (п. 4.2.17.6)
+
+
+def canon_section(raw: str | None) -> str | None:
+    """Название раздела из графы «Раздел»/заголовка → элемент SECTIONS (по первым 8 буквам: «Комплексы» ≠ «Комплекты»)."""
+    low = (raw or "").strip().lower()
+    return next((s for s in SECTIONS if low.startswith(s.lower()[:8])), None)
+
+
+def qty_missing(c: dict, section: str) -> bool:
+    """Количество не указано там, где графа «Кол.» обязательна. У материалов «Техн.»/«Приб.» допустимы (п. 4.2.17.6)."""
+    if section in QTY_OPTIONAL or (c.get("qty") not in (None, 0)):
+        return False
+    return not (section == "Материалы" and QTY_MARK.search(f"{c.get('qty_raw') or ''} {c.get('note') or ''}"))
 SKU_SECTION = {"1": "Сборочные единицы", "2": "Детали", "3": "Стандартные изделия", "4": "Прочие изделия",
                "5": "Материалы"}
 ESKD = re.compile(r"^[А-ЯA-Z]{2,5}[.\s]?\d{6}\.\d{3}(?:-\d{2,3})?$|^[А-ЯA-Z]{1,4}\s?\d{1,3}(?:\.\d{2,3})+(?:-\d{2,3})?$")
@@ -22,10 +38,9 @@ STD_NUM = re.compile(r"(?:ГОСТ|ОСТ|СТО|DIN|ISO|ИСО)\s*Р?\s*(?:ИС
 
 
 def section_of(row: dict, has_children: bool) -> str:
-    sec = (row.get("section") or "").strip()
-    for s in SECTIONS:
-        if sec.lower().startswith(s.lower()[:6]):
-            return s
+    found = canon_section(row.get("section"))
+    if found:
+        return found
     bt = (row.get("blank_type") or "").lower()
     if bt.startswith("материал"):
         return "Материалы"
@@ -95,6 +110,19 @@ def _alpha_key(name: str) -> str:
     return re.split(r"[\s\d]", (name or "").strip().lower(), maxsplit=1)[0]
 
 
+# ГОСТ 2.106: код документа в обозначении соответствует наименованию в разделе «Документация»
+DOC_CODES = [(r"сборочн\w+\s+чертеж", ("СБ",)), (r"чертеж\s+общего\s+вида", ("ВО",)), (r"габаритн\w+\s+чертеж", ("ГЧ",)),
+             (r"монтажн\w+\s+чертеж", ("МЧ",)), (r"технические\s+условия", ("ТУ",)),
+             (r"руководство\s+по\s+эксплуатации", ("РЭ",)), (r"паспорт", ("ПС",)), (r"формуляр", ("ФО",)),
+             (r"пояснительная\s+записка", ("ПЗ",)), (r"схема\s+электрическая\s+принципиальная", ("Э3",)),
+             (r"схема\s+электрическая\s+структурная", ("Э1",)), (r"схема\s+электрическая\s+функциональная", ("Э2",)),
+             (r"схема\s+электрическая\s+соединений", ("Э4",)), (r"схема\s+электрическая\s+подключения", ("Э5",)),
+             (r"перечень\s+элементов", ("ПЭ3", "ПЭ")), (r"ведомость\s+покупных", ("ВП",)),
+             (r"ведомость\s+спецификаций", ("ВС",))]
+MATERIAL_UNITS = {"кг", "г", "т", "м", "см", "мм", "л", "мл", "м2", "м²", "м3", "м³", "дм2", "дм²", "дм3", "дм³", "кв.м",
+                  "куб.м", "пог.м", "м.п."}
+
+
 def check_children(add, node_name: str, children: list[dict], where=(None, None), drawing_table: bool = False) -> None:
     """Правила ГОСТ 2.106 к списку составных частей одной сборочной единицы. add(sev, code, message, page, bbox)."""
     pg, bb = where
@@ -118,7 +146,7 @@ def check_children(add, node_name: str, children: list[dict], where=(None, None)
             add(WARNING, "S02", f"{pref}одна и та же составная часть записана несколькими строками: "
                 f"{'; '.join(f'{_label(c)} — {n} {_rows_word(n)}' for c, (_, n) in zip(ex[:6], rep[:6]))}"
                 f"{' и др.' if len(rep) > 6 else ''} — записывают одной строкой с общим количеством", pg, bb)
-    # сортировка: сборочные единицы и детали — по возрастанию обозначений (п. 3.5)
+    # сортировка: сборочные единицы и детали — по возрастанию обозначений (п. 4.2.5)
     for sec in ("Сборочные единицы", "Детали"):
         des = [norm_designation(c["designation"]) for c in children if c["_section"] == sec and c.get("designation")
                and not c.get("designation_is_sku")]
@@ -127,7 +155,7 @@ def check_children(add, node_name: str, children: list[dict], where=(None, None)
             bad = next(i for i in range(1, len(uniq)) if uniq[i] < uniq[i - 1])
             add(INFO, "S03", f"{pref}в разделе «{sec}» обозначения не по возрастанию: {uniq[bad - 1]} записано перед "
                 f"{uniq[bad]}", pg, bb)
-    # стандартные и прочие изделия — по алфавиту наименований, затем по стандарту (пп. 3.6, 3.7)
+    # стандартные и прочие изделия — по алфавиту наименований, затем по стандарту (пп. 4.2.6, 4.2.7)
     for sec, code in (("Стандартные изделия", "S04"), ("Прочие изделия", "S05")):
         items = [c for c in children if c["_section"] == sec and c.get("name")]
         keyf = (lambda c: (_alpha_key(c["name"]), tuple(_std_key(c["name"])))) if code == "S04" else \
@@ -155,7 +183,7 @@ def check_children(add, node_name: str, children: list[dict], where=(None, None)
                 hit(WARNING, "S06", c, "графа «Обозначение» не заполнена — для деталей и сборочных единиц записывают "
                     "обозначение основного конструкторского документа",
                     "не заполнена графа «Обозначение» у деталей/сборочных единиц")
-        elif c.get("designation") and not ESKD.match(c["designation"].replace(" ", " ")):
+        elif sec != "Документация" and c.get("designation") and not ESKD.match(c["designation"].replace(" ", " ")):
             hit(WARNING if drawing_table else INFO, "S07", c, f"в графе «Обозначение» «{c['designation']}» — для "
                 f"стандартных и прочих изделий и материалов без своей КД графу не заполняют, обозначение стандарта "
                 f"пишут в наименовании", "графа «Обозначение» заполнена у стандартных/прочих изделий или материалов "
@@ -165,8 +193,7 @@ def check_children(add, node_name: str, children: list[dict], where=(None, None)
                 "7798-70»)", "стандартные изделия записаны без обозначения стандарта")
         if not name and not c.get("designation"):
             hit(ERROR, "S14", c, "не заполнено наименование", "не заполнено наименование")
-        if not drawing_table and (c.get("qty") is None or c.get("qty") == 0) and sec not in ("Документация",
-                                                                                               "Комплекты"):
+        if not drawing_table and qty_missing(c, sec):
             hit(ERROR, "S09", c, "не указано количество", "не указано количество")
         if not drawing_table and sec == "Материалы" and not (c.get("unit") or "").strip():
             hit(WARNING, "S10", c, "для материалов количество указывают с единицами измерения",
@@ -175,6 +202,36 @@ def check_children(add, node_name: str, children: list[dict], where=(None, None)
             if not (c.get("material") or re.search(r"(?i)гост|ост|ту|лист|круг|труба|швеллер|уголок|полоса", name)):
                 hit(WARNING, "S11", c, "деталь без чертежа (БЧ) — указывают материал и размеры для изготовления",
                     "у деталей без чертежа (БЧ) не указаны материал и размеры")
+    # --- ГОСТ 2.106-2019: форма записи
+    for c in children:
+        sec, name = c["_section"], (c.get("name") or "").strip()
+        qty, unit = c.get("qty"), (c.get("unit") or "").strip().lower().replace(" ", "")
+        if sec == "Документация":
+            if c.get("pos"):
+                hit(INFO, "S15", c, "у документации графу «Поз.» не заполняют",
+                    "в разделе «Документация» заполнена графа «Поз.» (её не заполняют)")
+            des = norm_designation(c.get("designation") or "")
+            for rx, codes in DOC_CODES:
+                if re.search(rx, name.replace("ё", "е").replace("Ё", "Е"), re.I):
+                    if des and not any(re.search(re.escape(norm_designation(k)) + r"\d?$", des) for k in codes):
+                        hit(WARNING, "S16", c, f"код документа в обозначении не соответствует наименованию "
+                            f"(ожидается {'/'.join(codes)})", "код документа в обозначении не соответствует наименованию "
+                            "(«Сборочный чертёж» — СБ, «Технические условия» — ТУ…)")
+                    break
+        elif isinstance(qty, (int, float)) and qty > 0 and abs(qty - round(qty)) > 1e-9 and sec != "Материалы"                 and not unit:
+            hit(WARNING, "S17", c, "количество штучного изделия — целое число",
+                "у штучных изделий количество дробное (дробные количества записывают только для материалов "
+                "с единицей измерения)")
+        if name and name[0].islower() and not re.match(r"[a-z0-9]", name[0]):
+            hit(INFO, "S18", c, "наименование начинается со строчной буквы",
+                "наименование записано со строчной буквы (в графе «Наименование» первое слово пишут с прописной)")
+        if sec == "Стандартные изделия" and re.match(r"(?i)^(?:ГОСТ|ОСТ|DIN|ISO|ТУ)\b", name):
+            hit(INFO, "S19", c, "обозначение стандарта в начале наименования",
+                "в наименовании стандартного изделия обозначение стандарта стоит в начале (его записывают после "
+                "наименования и типоразмера: «Болт М6-6g×20.58 ГОСТ 7798-70»)")
+        if sec == "Материалы" and unit and unit not in MATERIAL_UNITS:
+            hit(WARNING, "S20", c, f"единица измерения «{c.get('unit')}» не годится для материала",
+                "у материалов единица измерения не из принятых (кг, г, т, м, мм, л, м², м³)")
     for code, (sev, text, rows) in found.items():
         names = [f"{c.get('pos') or '—'} {c.get('name') or c.get('designation')}" for c in rows]
         add(sev, code, f"{pref}{text}: {'; '.join(names[:8])}{f' и ещё {len(names) - 8}' if len(names) > 8 else ''}",

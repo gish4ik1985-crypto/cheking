@@ -22,18 +22,28 @@ from .matcheck import check_material
 from .textreq import check_heat, check_refs, check_tt_text
 from .views import check_views
 from .assembly import find_tables, check_assembly
-from . import masscheck
+from . import masscheck, ext_spec, specpdf
 from .spec import Spec
 from .textnorm import nfc
 from .titleblock import parse_title_block, calibrate_scale, has_form1
 from .welds import check_welds
+from .ost import check_ost
+from .eskd import check_eskd
+from .eskd2 import check_eskd2
+from .welds2 import check_welds2
+from .eskd3 import check_eskd3
+from .ext_all import check_ext
+from .textdoc import check_text_document, is_text_document
 from .exceptions import load_rules, apply_to_drawing
 
 PDF_EXT = {".pdf"}
 IMG_EXT = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
 CDW_EXT = {".cdw", ".spw", ".frw"}
 SE_EXT = {".dft"}
-SUPPORTED = PDF_EXT | IMG_EXT | CDW_EXT | SE_EXT
+# Родные файлы КОМПАС-3D и Solid Edge пока не принимаются — работаем с PDF. Код чтения и конвертации
+# (checking/cadreaders.py) сохранён: чтобы вернуть форматы, поставьте True (и добавьте расширения в accept страницы загрузки).
+CAD_FORMATS = False
+SUPPORTED = PDF_EXT | IMG_EXT | (CDW_EXT | SE_EXT if CAD_FORMATS else set())
 
 FILE_DES_RE = re.compile(r"[А-ЯA-Z]{2,5}[._]\d{6}[._]\d{3}(?:-\d{2,3})?|[А-ЯA-Z]{1,5}-[А-ЯA-Z]{0,4}-?\d{3,4}(?:\.\d{3})?")
 SKU_RE = re.compile(r"(?<!\d)(\d{3}-\d{6})(?!\d)")
@@ -84,6 +94,9 @@ def _split_documents(drw: Drawing, words: list) -> list[tuple[Drawing, list]]:
     return out
 
 
+# проверки чертежа, которые сохраняются для текстового документа (остальные к нему не относятся)
+TEXT_DOC_KEEP = {"B04", "B05", "B08", "B10", "B11", "B12", "N01", "N02"}
+
 _ERP = {"db": None, "error": None}
 
 
@@ -109,6 +122,8 @@ def _analyze(drw: Drawing, words: list, cfg: dict, spec: Spec | None, first_in_f
         extract(drw)
     if first_in_file:
         _file_facts(drw)
+    if specpdf.try_spec_document(drw, cfg):      # спецификация КОМПАС в PDF — не чертёж: проверяется таблица
+        return
     tb = drw.title
     drw.facts["material"] = parse_material(tb.material)
     des = tb.designation or drw.facts.get("file_designation", "")
@@ -146,7 +161,7 @@ def _analyze(drw: Drawing, words: list, cfg: dict, spec: Spec | None, first_in_f
     check_technology(drw, cfg)
     check_welds(drw, cfg)
     for extra in (check_views, check_tt_text, check_refs, check_heat, check_material, check_elements,
-                  check_gears, check_assembly, check_layout):
+                  check_gears, check_assembly, check_layout, check_ost, check_eskd, check_eskd2, check_welds2, check_eskd3, check_ext):
         try:
             extra(drw, cfg)
         except Exception as e:          # одна неудачная проверка не должна ронять весь чертёж
@@ -166,6 +181,11 @@ def _analyze(drw: Drawing, words: list, cfg: dict, spec: Spec | None, first_in_f
                     "(сопоставление по артикулу, обозначению или имени файла)")
     if spec_item and spec_item.get("dxf_length"):
         compare_erp_bbox(drw, spec_item)
+    if is_text_document(drw, des, cfg):
+        # текстовый документ (ТУ, ПЗ, РЭ…): проверки чертежа не применимы, выполняются проверки ГОСТ Р 2.105
+        drw.facts["text_document"] = True
+        drw.findings = [f for f in drw.findings if f.code in TEXT_DOC_KEEP or f.code.startswith(("F", "L"))]
+        check_text_document(drw, cfg)
     file_notes(drw)
     if drw.facts.get("cdw"):
         drw.add(INFO, "F03", CAT_FILE, "Файл КОМПАС прочитан без КОМПАС-3D: проверены основная надпись, масса, "
@@ -191,6 +211,9 @@ def check_file(path: str, cfg: dict | None = None, spec: Spec | None = None, img
     name = display_name or os.path.basename(path)
     ext = os.path.splitext(path)[1].lower()
     drw = Drawing(path, nfc(name), kind=ext.lstrip("."))
+    if ext in (CDW_EXT | SE_EXT) and not CAD_FORMATS:
+        drw.add(ERROR, "F05", CAT_FILE, f"Формат «{ext}» пока не принимается: сохраните чертёж в PDF")
+        return [drw]
     if img_dir:
         os.makedirs(img_dir, exist_ok=True)
     try:
@@ -253,7 +276,8 @@ def check_job(drawings: list[Drawing], cfg: dict | None = None, spec: Spec | Non
     (в списке drawings), к которым добавлены замечания."""
     cfg = cfg or load_config()
     try:
-        changed = masscheck.check_job(drawings, spec)
+        changed = ext_spec.pair_documents(drawings, spec)      # СП КОМПАС ↔ сборочный чертёж, детали, Excel
+        changed |= masscheck.check_job(drawings, spec)
     except Exception as e:
         if drawings:
             drawings[0].add(WARNING, "F07", CAT_FILE, f"Сверка документов между собой не выполнена: "

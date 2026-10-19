@@ -173,7 +173,7 @@ def parse_title_block(drw: Drawing, words: list[Word]) -> None:
            and re.fullmatch(r"\d{1,2}", w.text.strip())]
     if rev:
         tb.revision = rev[0].text
-    tb.designation = re.sub(r"(?i)(рев|вер)\.?\s*\d{0,2}", "", tb.designation.replace(" / ", " ")).strip()
+    tb.designation = re.sub(r"(?i)\b(рев|вер)\.?\s*\d{0,2}\b", "", tb.designation.replace(" / ", " ")).strip()
     tb.name = tb.name.replace(" / ", " ")
     m = re.search(r"\d+(?:[.,]\d+)?", tb.mass_raw or "")
     tb.mass = to_float(m.group(0)) if m else None

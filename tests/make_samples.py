@@ -42,7 +42,7 @@ def _dim(page, x, y, nominal, up=None, lo=None, h=3.5, vertical=False):
             _t(page, x + h * 0.15, y - w, lo, h * 0.7, rotate=90)
 
 
-def _title_block(page, pw, ph, des, name, material, mass, scale="1:1", fmt="A4"):
+def _title_block(page, pw, ph, des, name, material, mass, scale="1:1", fmt="A4", rotated=True):
     x0, y0 = pw - 190, ph - 60
     shape = page.new_shape()
     shape.draw_rect(pymupdf.Rect(20 * MM, 5 * MM, (pw - 5) * MM, (ph - 5) * MM))
@@ -68,7 +68,8 @@ def _title_block(page, pw, ph, des, name, material, mass, scale="1:1", fmt="A4")
     _t(page, x0 + 180, y0 + 39.5, "1", lab)
     _t(page, x0 + 140, ph - 1.5, "Формат", lab)
     _t(page, x0 + 165, ph - 1.5, fmt, lab)
-    _t(page, 90, 12, des, 5, rotate=180)
+    if rotated:
+        _t(page, 90, 12, des, 5, rotate=180)
 
 
 def make_errors():

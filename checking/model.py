@@ -24,8 +24,9 @@ CAT_EL = "Элементы деталей и соединения"
 CAT_ASM = "Сборочный чертёж и спецификация"
 CAT_SPEC = "Спецификация"
 CAT_CUSTOM = "Правила предприятия"
+CAT_TD = "Текстовые документы"
 CATEGORY_ORDER = [CAT_SPEC, CAT_DIM, CAT_GDT, CAT_EL, CAT_GEAR, CAT_ASM, CAT_TECH, CAT_WELD, CAT_HEAT, CAT_TT, CAT_REFS,
-                  CAT_VIEW, CAT_CUSTOM, CAT_DXF, CAT_TB, CAT_ERP, CAT_FILE]
+                  CAT_VIEW, CAT_TD, CAT_CUSTOM, CAT_DXF, CAT_TB, CAT_ERP, CAT_FILE]
 
 Box = tuple[float, float, float, float]   # мм, от левого верхнего угла листа
 

@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Отчёт проверки чертежей</title>
-<link rel="stylesheet" href="/static/style.css?v=20261012">
+<link rel="stylesheet" href="/static/style.css?v=20261015">
 </head>
 <body>
 <div class="topbar">
   <a class="logo" href="/" title="Новая проверка"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 12h6M9 16h6"/></svg></a>
+  <button class="btn" id="side-toggle" title="Скрыть или показать список документов">☰ Документы</button>
   <div>
     <h1>Отчёт проверки</h1>
     <div class="muted" id="sub">Загрузка…</div>
@@ -21,7 +22,6 @@
   </div>
   <a class="btn" id="excel" href="/api/jobs/{{ job_id }}/excel">Excel</a>
   <a class="btn" href="/api/jobs/{{ job_id }}/remarks.docx" title="Перечень замечаний для конструктора">Замечания (Word)</a>
-  <a class="btn" href="/admin" title="Какие проверки выполнять">Настройки</a>
   <a class="btn" href="/">Новая проверка</a>
 </div>
 
@@ -40,7 +40,7 @@ const KIND_RU = {linear: 'линейный', diameter: 'диаметр', radius:
                  angle: 'угол', thickness: 'толщина', sphere: 'сфера', square: 'квадрат', thread_other: 'резьба',
                  thread_tr: 'резьба Tr', thread_g: 'резьба G'};
 let data = [], current = 0, filters = {error: true, warning: true, info: true}, tab = 'findings', zoom = 1;
-let comp = null, view = 'doc', showHidden = false;
+let comp = null, view = 'doc', showHidden = false, fb = [], pick = false, GROUPS = [];
 const STATUS_RU = {ok: ['ok', 'Без замечаний'], warnings: ['warning', 'Проверить'], errors: ['error', 'Есть ошибки'],
                    missing: ['error', 'НЕТ ЧЕРТЕЖА'], not_required: ['info', 'не требуется']};
 
@@ -51,6 +51,8 @@ const signed = v => v === null || v === undefined ? '' : (v > 0 ? '+' : '') + nu
 async function load() {
   const r = await fetch(`/api/jobs/${JOB}?full=1`);
   const j = await r.json();
+  try { fb = await (await fetch(`/api/jobs/${JOB}/feedback`)).json(); } catch (e) { fb = []; }
+  if (!GROUPS.length) { try { GROUPS = (await (await fetch('/api/feedback/meta')).json()).groups; } catch (e) {} }
   data = j.results || [];
   comp = j.completeness || null;
   const tot = {error: 0, warning: 0, info: 0};
@@ -151,10 +153,18 @@ function renderDoc() {
   const d = data[current]; if (!d) return;
   const t = d.title, fs = visibleFindings(d);
   const facts = d.facts || {};
-  const isSpec = d.kind === 'spec';
-  const kv = isSpec ? [
-    ['Файл', d.file], ['Наименование', t.name], ['Тип', 'спецификация (проверка по ГОСТ 2.106)'],
-    ['Сборочных единиц', String((facts.spec_tree || []).length)],
+  const isSpec = d.kind === 'spec', isProc = d.kind === 'process';
+  const pr = facts.process || {};
+  if ((tab === 'ops' && !isProc) || (tab === 'rows' && !(isSpec && facts.spec_document)) ||
+      (['dims', 'limits', 'title', 'tt'].includes(tab) && (isProc || (isSpec && facts.spec_document)))) tab = 'findings';
+  const kv = isProc ? [
+    ['Файл', d.file], ['Вид документа', pr.type_name], ['Обозначение детали', t.designation], ['Наименование', t.name],
+    ['Материал', t.material], ['Чертёж детали в проверке', pr.drawing || (t.designation ? 'не найден' : '—')],
+    ['Операций распознано', String((pr.operations || []).length)],
+  ] : isSpec ? [
+    ['Файл', d.file], ['Обозначение', t.designation], ['Наименование', t.name],
+    ['Тип', facts.spec_document ? 'спецификация (PDF) — проверка по ГОСТ 2.106' : 'спецификация (проверка по ГОСТ 2.106)'],
+    facts.spec_document ? ['Строк в таблице', String((facts.spec_rows || []).length)] : ['Сборочных единиц', String((facts.spec_tree || []).length)],
   ] : [
     ['Файл', d.file + (d.sheets ? ' · ' + d.sheets : '')], ['Наименование', t.name], ['Материал', t.material],
     ['Масса', t.mass ? t.mass + ' кг' + (facts.mass_ref ? ` (СП: ${num(+facts.mass_ref.toFixed(4))})` : '') : '—'],
@@ -170,13 +180,23 @@ function renderDoc() {
   if (d.dxf) kv.push(['DXF', `${d.dxf.name} · ${num(d.dxf.size[0])}×${num(d.dxf.size[1])}`]);
   if (d.welds && d.welds.length) kv.push(['Сварные швы', d.welds.map(w => w.raw).join('; ')]);
   const pages = d.pages.filter(p => p.image);
-  const viewer = pages.length ? `
+  const hasViewer = pages.length > 0;
+  const viewer = hasViewer ? `
     <div class="viewer">
-      <div class="zoombar"><button class="btn" id="zin">+</button><button class="btn" id="zout">−</button>
-        <button class="btn" id="zfit">По ширине</button><span class="muted">Нажмите на замечание — место подсветится</span></div>
-      <div class="pages-scroll"><div class="pages-inner" id="pages" style="width:${zoom * 100}%">
-        ${pages.map(p => `<div class="page" data-page="${p.number}"><img src="${p.image}" alt="Лист ${p.number + 1}">
+      <div class="vtoolbar">
+        <button class="btn" id="zout" title="Уменьшить (−)">−</button><span id="zpct" class="zpct">100%</span><button class="btn" id="zin" title="Увеличить (+)">+</button>
+        <button class="btn" id="zfit" title="Масштаб по ширине окна (0)">По ширине</button>
+        <button class="btn" id="zall" title="Лист целиком">Лист целиком</button>
+        <span class="vsep"></span>
+        <button class="btn" id="fprev" title="Предыдущее замечание (K)">◀</button><span id="fcur" class="zpct"></span><button class="btn" id="fnext" title="Следующее замечание (J)">▶</button>
+        <span class="muted vhint">Колесо — масштаб · перетаскивание — сдвиг</span>
+      </div>
+      ${pick ? '<div class="pickbar">Нажмите на лист в том месте, где программа должна была найти ошибку (Esc — отмена)</div>' : ''}
+      <div class="vscroll" id="vscroll"><div class="pages-inner${pick ? ' pick' : ''}" id="pages">
+        ${pages.map(p => `<div class="page" data-page="${p.number}"><img src="${p.image}" alt="Лист ${p.number + 1}" draggable="false">
           <span class="pno">лист ${p.number + 1}</span>
+          ${docFb(d).filter(e => e.type === 'missed' && e.page === p.number && e.point).map(e =>
+            `<div class="miss-dot" title="Пропуск: ${esc(e.comment)}" style="left:${e.point[0] / p.width * 100}%;top:${e.point[1] / p.height * 100}%"></div>`).join('')}
           ${fs.filter(f => f.page === p.number && f.bbox).map(f => {
             const pad = 1.2, [x0, y0, x1, y1] = f.bbox;
             return `<div class="mark ${f.severity}" data-n="${f.n}" title="${esc(f.message)}" style="left:${(x0 - pad) / p.width * 100}%;top:${(y0 - pad) / p.height * 100}%;width:${(x1 - x0 + 2 * pad) / p.width * 100}%;height:${(y1 - y0 + 2 * pad) / p.height * 100}%"><span class="n">${f.n}</span></div>`;
@@ -190,32 +210,153 @@ function renderDoc() {
       </tbody></table></div>`
     : `<div class="banner">Предпросмотр листа недоступен для этого формата (${esc(d.kind)}).</div>`;
 
-  document.getElementById('main').innerHTML = `
-    <div class="doc-head"><a class="btn" style="order:2" href="/api/jobs/${JOB}/remarks.docx?doc=${d.id}">Замечания (Word)</a><div style="flex:1;min-width:260px">
+  const keep = saveView(d);
+  const summary = [t.mass ? `Масса ${t.mass} кг` : '', [t.scale, t.format].filter(Boolean).join(' · '), t.material].filter(Boolean);
+  const main = document.getElementById('main');
+  main.className = 'main' + (hasViewer ? ' ws' : '');
+  main.innerHTML = `
+    <div class="doc-head"><div class="dh-title">
       <h1>${esc(t.designation || d.file)} <span class="muted" style="font-weight:400">${esc(t.name || '')}</span></h1>
-      <div class="kv">${kv.map(([k, v]) => `<div><span>${k}</span>${esc(v || '—')}</div>`).join('')}</div>
-    </div></div>
+      <div class="dh-sum muted">${summary.map(esc).join(' · ')} <a href="#" id="kv-toggle">${kvOpen ? 'скрыть данные' : 'все данные'}</a></div>
+    </div>
+    <span class="dh-acts"><button class="btn" id="fb-miss" title="Отметить место на листе, где программа должна была найти ошибку">Программа не заметила</button>
+      <button class="btn" id="fb-parse" title="Программа неверно прочитала размер, допуск или штамп">Неверно прочитано</button>
+      <a class="btn" href="/api/jobs/${JOB}/remarks.docx?doc=${d.id}">Замечания (Word)</a></span></div>
+    ${kvOpen ? `<div class="kv kvbox">${kv.map(([k, v]) => `<div><span>${k}</span>${esc(v || '—')}</div>`).join('')}</div>` : ''}
     ${d.error ? `<div class="error-box">${esc(d.error)}</div>` : ''}
-    <div class="split">
-      <div>${viewer}</div>
-      <div>
+    <div class="ws-split">
+      ${hasViewer ? viewer + '<div class="gutter" id="gutter" title="Потяните, чтобы изменить ширину"></div>' : ''}
+      <div class="panel" id="panel">
+        ${hasViewer ? '' : viewer}
         <div class="tabs">
-          ${[['findings', `Замечания (${fs.length})`], ['dims', `Размеры (${d.dims.length})`], ['limits', 'Допуски'],
-             ['title', 'Основная надпись'], ['tt', `ТТ (${d.tt.length})`]]
+          ${(isProc ? [['findings', `Замечания (${fs.length})`], ['ops', `Операции (${(pr.operations || []).length})`],
+              ['fb', `Отметки (${docFb(d).length})`]]
+            : isSpec && facts.spec_document ? [['findings', `Замечания (${fs.length})`], ['rows', `Строки (${(facts.spec_rows || []).length})`],
+              ['fb', `Отметки (${docFb(d).length})`]]
+            : [['findings', `Замечания (${fs.length})`], ['dims', `Размеры (${d.dims.length})`], ['limits', 'Допуски'],
+             ['title', 'Основная надпись'], ['tt', `ТТ (${d.tt.length})`], ['fb', `Отметки (${docFb(d).length})`]])
             .map(([k, v]) => `<button data-tab="${k}" class="${tab === k ? 'active' : ''}">${v}</button>`).join('')}
         </div>
         <div id="tabbody">${renderTab(d, fs)}</div>
       </div>
     </div>`;
-  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { tab = b.dataset.tab; renderDoc(); });
+  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { tab = b.dataset.tab; keepPanel = false; renderDoc(); });
+  document.getElementById('kv-toggle').onclick = ev => { ev.preventDefault(); kvOpen = !kvOpen; renderDoc(); };
   bindMarks();
   bindActions();
-  const setZoom = z => { zoom = Math.max(1, Math.min(4, z)); document.getElementById('pages').style.width = zoom * 100 + '%'; };
-  if (pages.length) {
-    document.getElementById('zin').onclick = () => setZoom(zoom * 1.4);
-    document.getElementById('zout').onclick = () => setZoom(zoom / 1.4);
-    document.getElementById('zfit').onclick = () => setZoom(1);
+  if (hasViewer) initViewer(d, fs, keep);
+  else restorePanel(keep);
+  if (curN) document.querySelectorAll(`[data-n="${curN}"]`).forEach(e => e.classList.add('hl'));
+  if (!hasViewer) document.getElementById('main').scrollTop = keep.main || 0;
+}
+
+// ----------------------------------------------------------------- просмотр листа: масштаб, сдвиг, переход по замечаниям
+let kvOpen = false, keepPanel = true, viewKey = null, viewState = {zoom: 1, left: 0, top: 0, panel: 0};
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function baseW() { const sc = $('vscroll'); return sc ? Math.max(200, sc.clientWidth - 16) : 800; }
+function applyWidth() { const el = $('pages'); if (el) el.style.width = Math.round(baseW() * zoom) + 'px'; $('zpct') && ($('zpct').textContent = Math.round(zoom * 100) + '%'); }
+function setZoom(z, mx, my) {
+  const sc = $('vscroll'), el = $('pages'); if (!sc || !el) return;
+  mx = mx ?? sc.clientWidth / 2; my = my ?? sc.clientHeight / 2;
+  const fx = (sc.scrollLeft + mx - el.offsetLeft) / el.offsetWidth, fy = (sc.scrollTop + my - el.offsetTop) / el.offsetHeight;
+  zoom = clamp(z, 0.15, 12);
+  applyWidth();
+  sc.scrollLeft = fx * el.offsetWidth + el.offsetLeft - mx;
+  sc.scrollTop = fy * el.offsetHeight + el.offsetTop - my;
+}
+function fitAll(d) {
+  const sc = $('vscroll'), p = d.pages.find(x => x.image); if (!sc || !p) return;
+  setZoom(Math.min(1, (sc.clientHeight - 20) / (baseW() * p.height / p.width)));
+  sc.scrollLeft = 0; sc.scrollTop = 0;
+}
+function saveView(d) {
+  const sc = $('vscroll'), pn = $('panel'), mn = $('main');
+  const same = viewKey === d.id + ':' + JOB;
+  const st = {panel: pn && keepPanel && same ? pn.scrollTop : 0, main: mn ? mn.scrollTop : 0};
+  if (sc && same) { viewState = {zoom, left: sc.scrollLeft, top: sc.scrollTop}; }
+  keepPanel = true;
+  return st;
+}
+function restorePanel(keep) { const pn = $('panel'); if (pn) pn.scrollTop = keep.panel || 0; }
+function initViewer(d, fs, keep) {
+  const sc = $('vscroll'), key = d.id + ':' + JOB;
+  if (viewKey !== key) { viewKey = key; zoom = 1; curN = null; viewState = {zoom: 1, left: 0, top: 0}; }
+  else zoom = viewState.zoom;
+  applyWidth();
+  sc.scrollLeft = viewState.left; sc.scrollTop = viewState.top;
+  restorePanel(keep);
+  $('zin').onclick = () => setZoom(zoom * 1.3);
+  $('zout').onclick = () => setZoom(zoom / 1.3);
+  $('zfit').onclick = () => { setZoom(1); sc.scrollLeft = 0; sc.scrollTop = 0; };
+  $('zall').onclick = () => fitAll(d);
+  $('fprev').onclick = () => stepFinding(-1);
+  $('fnext').onclick = () => stepFinding(1);
+  updateFcur();
+  sc.addEventListener('wheel', ev => {
+    ev.preventDefault();
+    const r = sc.getBoundingClientRect();
+    setZoom(zoom * Math.exp(-ev.deltaY * 0.0016), ev.clientX - r.left, ev.clientY - r.top);
+  }, {passive: false});
+  let drag = null;
+  sc.onmousedown = ev => {
+    if (ev.button !== 0 || ev.target.closest('.mark')) return;
+    drag = {x: ev.clientX, y: ev.clientY, l: sc.scrollLeft, t: sc.scrollTop, moved: false};
+  };
+  window.onmousemove = ev => {
+    if (!drag) return;
+    const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) > 4) { drag.moved = true; sc.classList.add('drag'); }
+    if (drag.moved) { sc.scrollLeft = drag.l - dx; sc.scrollTop = drag.t - dy; }
+  };
+  window.onmouseup = () => {
+    if (drag && drag.moved) { sc.dataset.moved = '1'; setTimeout(() => delete sc.dataset.moved, 0); }
+    sc.classList.remove('drag'); drag = null;
+  };
+  sc.addEventListener('click', ev => { if (sc.dataset.moved) { ev.stopPropagation(); ev.preventDefault(); } }, true);
+  const g = $('gutter'), panel = $('panel');
+  g.onmousedown = ev => {
+    ev.preventDefault();
+    const startX = ev.clientX, w0 = panel.offsetWidth;
+    document.body.classList.add('resizing');
+    const mv = e => { const w = clamp(w0 - (e.clientX - startX), 300, window.innerWidth * 0.7);
+      document.documentElement.style.setProperty('--panel-w', w + 'px'); };
+    const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up);
+      document.body.classList.remove('resizing'); applyWidth();
+      try { localStorage.setItem('rep-panel-w', getComputedStyle(document.documentElement).getPropertyValue('--panel-w')); } catch (e) {} };
+    document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
+  };
+}
+let curN = null;
+function locFindings() { const d = data[current]; return d ? visibleFindings(d).filter(f => f.bbox) : []; }
+function updateFcur() {
+  const list = locFindings(), el = $('fcur'); if (!el) return;
+  const i = list.findIndex(f => f.n === curN);
+  el.textContent = list.length ? `${i >= 0 ? i + 1 : '–'}/${list.length}` : '0';
+}
+function stepFinding(dir) {
+  const list = locFindings(); if (!list.length) return;
+  let i = list.findIndex(f => f.n === curN);
+  i = i < 0 ? (dir > 0 ? 0 : list.length - 1) : (i + dir + list.length) % list.length;
+  selectFinding(list[i].n, true);
+}
+function selectFinding(n, fromNav) {
+  curN = n;
+  document.querySelectorAll('.hl').forEach(e => e.classList.remove('hl'));
+  document.querySelectorAll(`[data-n="${n}"]`).forEach(e => e.classList.add('hl'));
+  const f = document.querySelector(`.finding[data-n="${n}"]`);
+  const pn = $('panel');
+  if (f && pn) { const r = f.getBoundingClientRect(), pr = pn.getBoundingClientRect();
+    if (r.top < pr.top + 40 || r.bottom > pr.bottom) pn.scrollTo({top: pn.scrollTop + r.top - pr.top - 60, behavior: 'smooth'}); }
+  const m = document.querySelector(`.mark[data-n="${n}"]`), sc = $('vscroll');
+  if (m && sc) {
+    const mr = m.getBoundingClientRect();
+    if (mr.width < 70) { setZoom(Math.min(zoom * 110 / Math.max(mr.width, 8), Math.max(zoom, 4)), sc.clientWidth / 2, sc.clientHeight / 2); }
+    const r2 = m.getBoundingClientRect(), sr = sc.getBoundingClientRect();
+    sc.scrollTo({left: sc.scrollLeft + (r2.left + r2.width / 2) - (sr.left + sr.width / 2),
+                 top: sc.scrollTop + (r2.top + r2.height / 2) - (sr.top + sr.height / 2)});
   }
+  updateFcur();
 }
 
 function hiddenBlock(d) {
@@ -228,6 +369,21 @@ function hiddenBlock(d) {
 }
 
 function renderTab(d, fs) {
+  if (tab === 'ops') {
+    const ops = ((d.facts || {}).process || {}).operations || [];
+    if (!ops.length) return '<div class="muted">Операции не распознаны: пришлите образец документа, чтобы научить программу его форме.</div>';
+    return `<table class="grid"><tr><th>№</th><th>Операция</th><th>Оборудование</th><th>Строка документа</th></tr>
+      ${ops.map(o => `<tr><td class="mono">${esc(o.no || '—')}</td><td>${esc(o.name)}</td><td>${esc(o.equipment || '')}</td>
+        <td class="muted small">${esc(o.line)}</td></tr>`).join('')}</table>`;
+  }
+  if (tab === 'rows') {
+    const rows = (d.facts || {}).spec_rows || [];
+    if (!rows.length) return '<div class="muted">Строки таблицы не распознаны.</div>';
+    return `<table class="grid"><tr><th>Раздел</th><th>Поз.</th><th>Обозначение</th><th>Наименование</th><th>Кол.</th><th>Прим.</th></tr>
+      ${rows.map(r => `<tr><td class="small muted">${esc(r.section || '')}</td><td class="mono">${esc(r.pos || '')}</td>
+        <td class="mono">${esc(r.designation || '')}</td><td>${esc(r.name || '')}</td>
+        <td>${r.qty == null ? '' : num(r.qty)}${r.unit ? ' ' + esc(r.unit) : ''}</td><td class="small">${esc(r.note || '')}</td></tr>`).join('')}</table>`;
+  }
   if (tab === 'findings') {
     if (!fs.length) return `<div class="empty">${d.findings.length ? 'Все замечания скрыты фильтром' : 'Замечаний нет'}</div>` + hiddenBlock(d);
     const cats = [...new Set(fs.map(f => f.category))];
@@ -235,17 +391,18 @@ function renderTab(d, fs) {
       <div class="finding ${f.severity} ${f.bbox ? 'has-loc' : ''}" data-n="${f.n}">
         <div class="num">${f.n}</div>
         <div><div>${esc(f.message)}</div>
-          <div class="meta"><span>${SEV_RU[f.severity]} · ${esc(f.code)}</span>${f.standard ? `<span>${esc(f.standard)}</span>` : ''}
+          <div class="meta"><span>${SEV_RU[f.severity]} · ${esc(f.code)}</span>${f.standard ? `<span>${esc(f.standard)}${isAdmin() ? ` <a href="#" class="norm-link" data-std="${esc(f.standard)}" target="_blank" hidden title="Открыть текст стандарта на нужной странице">текст ГОСТ</a>` : ''}</span>` : ''}
           ${f.page !== null && f.page !== undefined ? `<span>лист ${f.page + 1}</span>` : ''}
-          <span class="acts"><a href="#" data-ex="drawing" data-n="${f.n}">не ошибка</a> · <a href="#" data-ex="global" data-n="${f.n}">отключить правило</a></span></div></div>
+          <span class="acts">${fbButtons(d, f)}${isAdmin() ? ` · <a href="#" data-ex="drawing" data-n="${f.n}">не ошибка</a> · <a href="#" data-ex="global" data-n="${f.n}">отключить правило</a> · <a href="#" data-cm="${f.n}" title="Комментарий администратора к этому замечанию: что на самом деле на чертеже, где программа ошиблась">комментарий</a>` : ''}</span></div>${fbComments(d, f)}</div>
       </div>`).join('')}</div>`).join('') + hiddenBlock(d);
   }
   if (tab === 'dims') {
     if (!d.dims.length) return '<div class="muted">Размеры не извлечены (для .cdw/.dft без САПР — только основная надпись и ТТ).</div>';
-    return `<table class="grid"><tr><th>Размер</th><th>Тип</th><th>Номинал</th><th>Поле</th><th>Верх.</th><th>Ниж.</th><th>Прим.</th></tr>
+    return `<table class="grid"><tr><th>Размер</th><th>Тип</th><th>Номинал</th><th>Поле</th><th>Верх.</th><th>Ниж.</th><th>Прим.</th><th></th></tr>
       ${d.dims.map(x => `<tr><td class="mono">${esc(x.raw)}</td><td>${KIND_RU[x.kind] || x.kind}</td><td>${num(x.nominal)}</td>
         <td>${esc(x.field || x.fit || '')}</td><td>${signed(x.upper)}</td><td>${signed(x.lower)}</td>
-        <td>${[x.reference ? 'справочный' : '', x.count ? x.count + ' шт.' : ''].filter(Boolean).join(', ')}</td></tr>`).join('')}</table>`;
+        <td>${[x.reference ? 'справочный' : '', x.count ? x.count + ' шт.' : ''].filter(Boolean).join(', ')}</td>
+        <td><a href="#" data-parse="${esc(x.raw)}" title="Программа прочитала размер неправильно">не так</a></td></tr>`).join('')}</table>`;
   }
   if (tab === 'limits') {
     if (!d.limits.length) return '<div class="muted">На чертеже нет размеров с полями допусков или отклонениями.</div>';
@@ -262,6 +419,7 @@ function renderTab(d, fs) {
     return (t.found ? '' : '<div class="banner">Основная надпись по форме 1 не распознана — поля могут быть пустыми.</div>') +
       `<table class="grid">${rows.map(([k, v]) => `<tr><th style="width:38%">${esc(k)}</th><td>${esc(v || '—')}</td></tr>`).join('')}</table>`;
   }
+  if (tab === 'fb') return renderFbTab(d);
   if (tab === 'tt') {
     const rough = (d.roughness || []).map(r => `${r.param} ${num(r.value)}${r.general ? ' (общая)' : ''}`).join(', ');
     return (d.tt.length ? `<ol class="tt-list">${d.tt.map(x => `<li>${esc(x)}</li>`).join('')}</ol>` : '<div class="muted">ТТ не найдены</div>') +
@@ -272,6 +430,7 @@ function renderTab(d, fs) {
 
 function bindActions() {
   const d = data[current];
+  bindFeedback(d);
   document.querySelectorAll('[data-ex]').forEach(a => a.onclick = ev => {
     ev.preventDefault(); ev.stopPropagation();
     const f = d.findings[+a.dataset.n - 1]; addException(f, a.dataset.ex);
@@ -282,22 +441,200 @@ function bindActions() {
 }
 
 function bindMarks() {
-  const hl = n => {
-    document.querySelectorAll('.hl').forEach(e => e.classList.remove('hl'));
-    document.querySelectorAll(`[data-n="${n}"]`).forEach(e => e.classList.add('hl'));
-  };
-  document.querySelectorAll('.finding.has-loc').forEach(el => el.onclick = () => {
-    hl(el.dataset.n);
-    const m = document.querySelector(`.mark[data-n="${el.dataset.n}"]`);
-    if (m) m.scrollIntoView({behavior: 'smooth', block: 'center', inline: 'center'});
+  document.querySelectorAll('.finding.has-loc').forEach(el => el.onclick = ev => {
+    if (ev.target.closest('a, button')) return;
+    selectFinding(+el.dataset.n);
   });
-  document.querySelectorAll('.mark').forEach(el => el.onclick = () => {
-    hl(el.dataset.n); tab = tab === 'findings' ? tab : 'findings';
-    const f = document.querySelector(`.finding[data-n="${el.dataset.n}"]`);
-    if (f) f.scrollIntoView({behavior: 'smooth', block: 'center'});
+  document.querySelectorAll('.mark').forEach(el => el.onclick = ev => {
+    ev.stopPropagation();
+    const n = +el.dataset.n;
+    if (tab !== 'findings') { tab = 'findings'; curN = n; keepPanel = false; renderDoc(); }
+    selectFinding(n);
   });
 }
 
+// ----------------------------------------------------------------- отметки тестировщика
+const isAdmin = () => !!(window.ME && window.ME.role === 'admin');
+const myName = () => (window.ME && window.ME.name) || '';
+const docFb = d => fb.filter(e => e.doc === d.id);
+const FB_LABEL = {ok: 'верно', false: 'ложное', inexact: 'неточно'};
+const FB_HINT = {ok: 'Замечание правильное', false: 'Ложное срабатывание: на чертеже всё в порядке',
+                 inexact: 'Замечание по делу, но формулировка или место указаны неточно'};
+
+function myVerdict(d, f) {
+  const e = fb.find(x => x.type === 'finding' && x.user === myName() && x.doc === d.id && x.code === f.code && x.message === f.message);
+  return e ? e.verdict : null;
+}
+function fbButtons(d, f) {
+  const v = myVerdict(d, f);
+  return `<span class="fb-acts">` + ['ok', 'false', 'inexact'].map(k =>
+    `<button class="fb-btn ${v === k ? 'on-' + k : ''}" data-fb="${k}" data-n="${f.n}" title="${FB_HINT[k]}">${FB_LABEL[k]}</button>`).join(' ') + `</span>`;
+}
+
+function askModal(title, fields, onSave, hint) {
+  const m = document.createElement('div');
+  m.className = 'modal';
+  m.innerHTML = `<div class="modal-card"><h2>${esc(title)}</h2>${hint ? `<div class="fb-note">${esc(hint)}</div>` : ''}
+    ${fields.map(f => `<label>${esc(f.label)}${f.type === 'select'
+      ? `<select data-k="${f.key}">${f.options.map(o => `<option>${esc(o)}</option>`).join('')}</select>`
+      : f.type === 'area' ? `<textarea data-k="${f.key}" rows="4" placeholder="${esc(f.ph || '')}">${esc(f.value || '')}</textarea>`
+      : `<input type="text" data-k="${f.key}" value="${esc(f.value || '')}" placeholder="${esc(f.ph || '')}">`}</label>`).join('')}
+    <div class="error-box" hidden></div>
+    <div class="modal-acts"><button class="btn" data-x>Отмена</button><button class="btn primary" data-ok>Сохранить</button></div></div>`;
+  document.body.appendChild(m);
+  const close = () => m.remove();
+  m.querySelector('[data-x]').onclick = close;
+  m.onclick = ev => { if (ev.target === m) close(); };
+  const first = m.querySelector('textarea, input'); if (first) first.focus();
+  m.querySelector('[data-ok]').onclick = async () => {
+    const vals = {};
+    m.querySelectorAll('[data-k]').forEach(e => vals[e.dataset.k] = e.value.trim());
+    const err = await onSave(vals);
+    if (err) { const b = m.querySelector('.error-box'); b.hidden = false; b.textContent = err; } else close();
+  };
+}
+
+async function sendFb(rec) {
+  const d = data[current];
+  const body = {doc: d.id, file: d.file, designation: d.title.designation, ...rec};
+  const r = await fetch(`/api/jobs/${JOB}/feedback`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const j = await r.json();
+  if (!r.ok) return j.error || 'Не удалось сохранить';
+  fb = await (await fetch(`/api/jobs/${JOB}/feedback`)).json();
+  renderDoc();
+  return null;
+}
+
+const cmOf = (d, f) => fb.filter(e => e.type === 'comment' && e.doc === d.id && e.code === f.code && e.message === f.message);
+function fbComments(d, f) {
+  if (!isAdmin()) return '';
+  return cmOf(d, f).map(e => `<div class="fb-comment"><b>${esc(e.user)}</b> <span class="muted small">${esc(e.ts)}</span>
+    <div>${esc(e.comment)}</div>${e.expected ? `<div class="small">Как должно быть: ${esc(e.expected)}</div>` : ''}
+    <a href="#" data-fbdel="${e.id}" class="small">удалить</a></div>`).join('');
+}
+
+const _normCache = {};
+async function linkNorms() {
+  if (!isAdmin()) return;
+  const links = [...document.querySelectorAll('.norm-link')];
+  for (const std of [...new Set(links.map(a => a.dataset.std))]) {
+    if (!(std in _normCache)) {
+      try { _normCache[std] = await (await fetch('/api/admin/norms/lookup?std=' + encodeURIComponent(std))).json(); } catch (e) { _normCache[std] = null; }
+    }
+    const r = _normCache[std];
+    if (!r || !r.id) continue;
+    links.filter(a => a.dataset.std === std).forEach(a => {
+      a.href = '/norms/' + encodeURIComponent(r.id) + (r.page ? '#page=' + r.page : '');
+      a.title = r.designation + (r.page ? ', стр. ' + r.page : '');
+      a.hidden = false;
+      a.onclick = ev => ev.stopPropagation();
+    });
+  }
+}
+
+function bindFeedback(d) {
+  linkNorms();
+  document.querySelectorAll('[data-cm]').forEach(a => a.onclick = ev => {
+    ev.preventDefault(); ev.stopPropagation();
+    const f = d.findings[+a.dataset.cm - 1];
+    askModal('Комментарий к замечанию', [
+      {key: 'comment', label: 'Что на самом деле на чертеже / где программа ошиблась', type: 'area',
+       ph: 'Например: размеры 12 и 15 стоят рядом, программа прочитала их как один размер 1215'},
+      {key: 'expected', label: 'Как должно быть (необязательно)', ph: 'Например: два размера: 12 и 15'}],
+      vals => vals.comment ? sendFb({type: 'comment', code: f.code, message: f.message, page: f.page, bbox: f.bbox,
+                                     comment: vals.comment, expected: vals.expected}) : 'Напишите комментарий',
+      `${f.code}: ${f.message}`);
+  });
+  document.querySelectorAll('[data-fb]').forEach(b => b.onclick = ev => {
+    ev.preventDefault(); ev.stopPropagation();
+    const f = d.findings[+b.dataset.n - 1], v = b.dataset.fb;
+    const rec = {type: 'finding', verdict: v, code: f.code, message: f.message, page: f.page, bbox: f.bbox};
+    if (v === 'ok') return sendFb(rec);
+    askModal(v === 'false' ? 'Ложное срабатывание' : 'Замечание неточное', [
+      {key: 'comment', label: v === 'false' ? 'Почему замечание неверно? (что на чертеже на самом деле)' : 'Что неточно?', type: 'area',
+       ph: 'Например: допуск общий, указан в ТТ п. 2'}],
+      vals => sendFb({...rec, comment: vals.comment}), `${f.code}: ${f.message}`);
+  });
+  document.querySelectorAll('[data-parse]').forEach(a => a.onclick = ev => {
+    ev.preventDefault(); parseModal(a.dataset.parse);
+  });
+  const miss = document.getElementById('fb-miss');
+  if (miss) miss.onclick = () => { pick = !pick; tab = tab; renderDoc(); };
+  const pm = document.getElementById('fb-parse');
+  if (pm) pm.onclick = () => parseModal('');
+  document.querySelectorAll('[data-fbdel]').forEach(a => a.onclick = async ev => {
+    ev.preventDefault();
+    if (!confirm('Удалить отметку?')) return;
+    await fetch(`/api/jobs/${JOB}/feedback/${a.dataset.fbdel}`, {method: 'DELETE'});
+    fb = await (await fetch(`/api/jobs/${JOB}/feedback`)).json();
+    renderDoc();
+  });
+  if (pick) document.querySelectorAll('#pages .page').forEach(pg => pg.onclick = ev => {
+    const img = pg.querySelector('img'), rc = img.getBoundingClientRect();
+    const p = d.pages.find(x => x.number === +pg.dataset.page);
+    const point = [+((ev.clientX - rc.left) / rc.width * p.width).toFixed(1), +((ev.clientY - rc.top) / rc.height * p.height).toFixed(1)];
+    pick = false;
+    askModal('Программа не заметила', [
+      {key: 'group', label: 'К какой группе относится', type: 'select', options: GROUPS},
+      {key: 'comment', label: 'Что должно было быть найдено?', type: 'area', ph: 'Например: размер 40 H7 — нет шероховатости посадочной поверхности'}],
+      vals => sendFb({type: 'missed', page: p.number, point, group: vals.group, comment: vals.comment}),
+      `Лист ${p.number + 1}, место отмечено на чертеже`);
+    renderDoc();
+  });
+}
+
+function parseModal(dim) {
+  askModal('Неверно прочитано', [
+    {key: 'dim', label: 'Как прочитала программа (размер, допуск, поле штампа)', value: dim},
+    {key: 'expected', label: 'Как должно быть', ph: 'Например: ⌀295,7 -0,1'},
+    {key: 'comment', label: 'Комментарий', type: 'area'}],
+    vals => vals.expected || vals.comment ? sendFb({type: 'parse', dim: vals.dim, expected: vals.expected,
+      comment: vals.comment || 'прочитано неверно'}) : 'Укажите, как должно быть, или напишите комментарий',
+    'Такие отметки помогают исправить разбор текста чертежа');
+}
+
+function renderFbTab(d) {
+  const list = docFb(d);
+  const TYPE = {finding: 'Замечание', missed: 'Пропуск', parse: 'Разбор', comment: 'Комментарий'};
+  return `<p class="muted">Ваши отметки по этому чертежу${isAdmin() ? ' (администратор видит отметки всех)' : ''}. Отмечайте замечания кнопками
+    «верно / ложное / неточно», а пропуски — кнопкой «Программа не заметила».</p>` +
+    (list.length ? `<table class="grid"><tr><th>Тип</th><th>Кто</th><th>Что</th><th></th></tr>${list.map(e => `<tr>
+      <td>${TYPE[e.type]}${e.verdict ? ' · ' + FB_LABEL[e.verdict] : ''}</td><td>${esc(e.user)}</td>
+      <td>${esc([e.code, e.message || e.dim, e.group, e.expected ? '→ ' + e.expected : '', e.comment].filter(Boolean).join(' · '))}</td>
+      <td>${e.user === myName() || isAdmin() ? `<a href="#" data-fbdel="${e.id}">удалить</a>` : ''}</td></tr>`).join('')}</table>`
+      : '<div class="empty">Отметок пока нет</div>');
+}
+
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && pick) { pick = false; renderDoc(); } });
+document.addEventListener('me-ready', () => { if (data.length) renderDoc(); });
+
+const topbarH = () => {
+  const l = document.querySelector('.layout');
+  if (l) document.documentElement.style.setProperty('--topbar-h', Math.round(l.getBoundingClientRect().top + window.scrollY) + 'px');
+};
+const sideState = on => {
+  document.querySelector('.layout').classList.toggle('collapsed', !on);
+  try { localStorage.setItem('rep-side', on ? '1' : '0'); } catch (e) {}
+  setTimeout(() => { if ($('pages')) applyWidth(); }, 180);
+};
+document.getElementById('side-toggle').onclick = () => sideState(document.querySelector('.layout').classList.contains('collapsed'));
+try {
+  const w = localStorage.getItem('rep-panel-w'); if (w) document.documentElement.style.setProperty('--panel-w', w);
+  const narrow = window.innerWidth < 900;
+  document.querySelector('.layout').classList.toggle('collapsed', narrow ? true : localStorage.getItem('rep-side') === '0');
+} catch (e) {}
+window.addEventListener('resize', () => { topbarH(); if ($('pages')) applyWidth(); });
+document.addEventListener('me-ready', () => setTimeout(topbarH, 50));
+topbarH();
+document.addEventListener('keydown', ev => {
+  if (ev.target.closest('input, textarea, select') || ev.ctrlKey || ev.metaKey || ev.altKey || document.querySelector('.modal')) return;
+  const k = ev.key.toLowerCase();
+  if (k === 'j' || k === 'о') stepFinding(1);
+  else if (k === 'k' || k === 'л') stepFinding(-1);
+  else if (k === '+' || k === '=') setZoom(zoom * 1.3);
+  else if (k === '-') setZoom(zoom / 1.3);
+  else if (k === '0') { setZoom(1); const sc = $('vscroll'); if (sc) { sc.scrollLeft = 0; sc.scrollTop = 0; } }
+});
 document.querySelectorAll('#filters button').forEach(b => b.onclick = () => {
   filters[b.dataset.sev] = !filters[b.dataset.sev];
   b.classList.toggle('off', !filters[b.dataset.sev]);
@@ -306,5 +643,6 @@ document.querySelectorAll('#filters button').forEach(b => b.onclick = () => {
 document.getElementById('q').oninput = renderDocs;
 load();
 </script>
+<script src="/static/user.js"></script>
 </body>
 </html>

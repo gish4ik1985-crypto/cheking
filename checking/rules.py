@@ -8,10 +8,10 @@ from . import tolerances as T
 from .material import parse_material, norm_grade
 from .model import (Drawing, Dimension, ERROR, WARNING, INFO,
                     CAT_DIM, CAT_TECH, CAT_TT, CAT_TB, CAT_ERP, CAT_FILE)
-from .normdata import RA_SERIES as RA_GOST, RZ_SERIES, RA_PREFERRED, RZ_PREFERRED, clearance_for
+from .normdata import RA_SERIES as RA_GOST, RZ_SERIES, RA_PREFERRED, RZ_PREFERRED, clearance_for, scale_ok
 from .standards import (check_metric_thread, THREAD_TOL_RE, FILLET_SERIES, in_ra40, RA_FOR_IT,
                         density_for, METRIC_THREADS, fmtn)
-from .textnorm import norm_designation, norm_words, ref_key
+from .textnorm import norm_designation, norm_words, ref_key, split_designation
 
 STD_DIM = "ГОСТ 2.307-2011"
 STD_TOL = "ГОСТ 25346-2013"
@@ -21,7 +21,6 @@ FORMATS = {"A0": (841, 1189), "A1": (594, 841), "A2": (420, 594), "A3": (297, 42
 SCALES = {"1:1", "1:2", "1:2,5", "1:4", "1:5", "1:10", "1:15", "1:20", "1:25", "1:40", "1:50", "1:75",
           "1:100", "1:200", "1:400", "1:500", "1:800", "1:1000", "2:1", "2,5:1", "4:1", "5:1", "10:1",
           "20:1", "40:1", "50:1", "100:1"}
-DESIG_RE = r"(?P<org>[А-ЯA-Z]{4})\.(?P<cls>\d{6})\.(?P<num>\d{3})(?:-(?P<isp>\d{2,3}))?(?:\s?(?P<doc>[А-Я]{1,3}\d?))?"
 
 
 def _decimals(raw: str | None) -> int:
@@ -48,7 +47,7 @@ def check_dimensions(drw: Drawing, cfg: dict) -> None:
 
         if d.chain and d.pitch and nom and abs(d.chain * d.pitch - nom) > 1e-6:
             drw.add(ERROR, "D34", CAT_DIM, f"Цепочка {_lbl(d)}: {d.chain}×{fmtn(d.pitch)} = "
-                    f"{fmtn(round(d.chain * d.pitch, 3))}, а не {fmtn(nom)}", pg, bb, STD_DIM)
+                    f"{fmtn(round(d.chain * d.pitch, 3))}, а не {fmtn(nom)}", pg, bb, "ГОСТ 2.307-2011 п. 5.48")
 
         if d.decimal_point:
             drw.add(WARNING, "D07", CAT_DIM, f"В размере {_lbl(d)} дробная часть отделена точкой — по ЕСКД "
@@ -58,7 +57,7 @@ def check_dimensions(drw: Drawing, cfg: dict) -> None:
                     f"латинских (М/Н/К…) — для ЧПУ и поиска это разные символы", pg, bb, STD_TOL)
         if d.reference and d.has_tolerance:
             drw.add(ERROR, "D08", CAT_DIM, f"Справочный размер {_lbl(d)} указан с предельными отклонениями — "
-                    f"у справочных размеров отклонения не указывают", pg, bb, STD_DIM)
+                    f"у справочных размеров отклонения не указывают", pg, bb, "ГОСТ 2.307-2011 п. 4.4")
 
         if d.kind == "thread" and nom:
             ok, msg = check_metric_thread(nom, d.pitch)
@@ -161,17 +160,17 @@ def check_dimensions(drw: Drawing, cfg: dict) -> None:
             lo = d.lower if d.lower is not None else 0.0
             if up < lo:
                 drw.add(ERROR, "D04", CAT_DIM, f"Размер {_lbl(d)}: верхнее отклонение ({T.fmt(up, True)}) меньше "
-                        f"нижнего ({T.fmt(lo, True)}) — перепутаны местами", pg, bb, STD_DIM)
+                        f"нижнего ({T.fmt(lo, True)}) — перепутаны местами", pg, bb, "ГОСТ 2.307-2011 п. 6.6")
             elif up == lo:
                 drw.add(ERROR, "D04", CAT_DIM, f"Размер {_lbl(d)}: верхнее и нижнее отклонения равны — "
-                        f"нулевой допуск", pg, bb, STD_DIM)
+                        f"нулевой допуск", pg, bb, "ГОСТ 2.307-2011 п. 6.6")
             if not d.symmetric and up > lo and not d.reference and abs(up + lo) < 1e-9:
                 drw.add(WARNING, "D05", CAT_DIM, f"Размер {_lbl(d)}: равные по модулю отклонения указывают "
-                        f"одним числом со знаком ± ({fmtn(nom)}±{fmtn(up)})", pg, bb, STD_DIM)
+                        f"одним числом со знаком ± ({fmtn(nom)}±{fmtn(up)})", pg, bb, "ГОСТ 2.307-2011 п. 6.6")
             if (d.upper_raw and d.lower_raw and not d.symmetric and up != 0 and lo != 0
                     and _decimals(d.upper_raw) != _decimals(d.lower_raw)):
                 drw.add(WARNING, "D06", CAT_DIM, f"Размер {_lbl(d)}: разное число знаков после запятой в верхнем и "
-                        f"нижнем отклонениях — их выравнивают (например, +0,10 / −0,05)", pg, bb, STD_DIM)
+                        f"нижнем отклонениях — их выравнивают (например, +0,10 / −0,05)", pg, bb, "ГОСТ 2.307-2011 п. 6.7")
             tol = up - lo
             if tol > 0:
                 g = T.equivalent_grade(nom, tol)
@@ -221,14 +220,14 @@ def check_tt(drw: Drawing, cfg: dict) -> None:
         d = refs1[0]
         drw.add(WARNING, "D09", CAT_TT, f"На чертеже {len(refs1)} размер(ов) со знаком «*» "
                 f"({', '.join(x.raw for x in refs1[:5])}), но в ТТ нет пояснения «* Размер(ы) для справок»",
-                d.page, d.bbox, "ГОСТ 2.316-2008")
+                d.page, d.bbox, "ГОСТ 2.307-2011 п. 4.3")
     if refs2 and "**" not in tt:
         d = refs2[0]
         drw.add(WARNING, "D09", CAT_TT, f"Размеры со знаком «**» ({', '.join(x.raw for x in refs2[:5])}) "
-                f"не пояснены в ТТ", d.page, d.bbox, "ГОСТ 2.316-2008")
+                f"не пояснены в ТТ", d.page, d.bbox, "ГОСТ 2.307-2011 п. 4.3")
     if re.search(r"\*\s*Размер", tt) and not refs1 and drw.dims and not drw.ocr:
         drw.add(INFO, "P07", CAT_TT, "В ТТ есть пункт «* Размеры для справок», но размеров со знаком «*» "
-                "на чертеже не найдено", None, None, "ГОСТ 2.316-2008")
+                "на чертеже не найдено", None, None, "ГОСТ 2.307-2011 п. 4.3")
 
     untoleranced = [d for d in drw.dims if d.kind in ("linear", "diameter", "radius", "square", "thickness")
                     and not d.has_tolerance and not d.reference]
@@ -453,15 +452,16 @@ def check_title(drw: Drawing, cfg: dict, spec_item: dict | None) -> None:
     if des and tb.rotated_designation and norm_designation(tb.rotated_designation) != norm_designation(des):
         drw.add(WARNING, "B11", CAT_TB, f"Обозначение в графе 26 «{tb.rotated_designation}» отличается от "
                 f"основной надписи «{des}»", drw.first_page, None, "ГОСТ Р 2.104-2023")
-    m = re.fullmatch(DESIG_RE, des.replace(" ", " "))
+    sd = split_designation(des)                      # (децимальный номер, исполнение, код документа)
+    m = sd if sd and re.fullmatch(r"(?:[А-Я]{4}|\d{8})\.\d{6}\.\d{3,}", sd[0]) else None
     if des and any(des.startswith(o + ".") for o in cfg.get("org_codes", [])):
         if not m:
             drw.add(WARNING, "B12", CAT_TB, f"Обозначение «{des}» не соответствует структуре ГОСТ 2.201: "
                     f"КОД.ХХХХХХ.ХХХ[-ХХ] [код документа]", drw.first_page, tb.bboxes.get("designation"),
-                    "ГОСТ 2.201-80")
+                    "ГОСТ Р 2.201-2023 п. 5.2.2, 5.2.4")
         else:
-            cls = int(m.group("cls")[:2])
-            if not is_asm and not 71 <= cls <= 76 and m.group("doc") is None:
+            cls = int(m[0].split(".")[1][:2])
+            if not is_asm and not 71 <= cls <= 76 and not m[2]:
                 drw.add(INFO, "B12", CAT_TB, f"Класс {m.group('cls')[:2]} в обозначении детали «{des}»: по "
                         f"классификатору ЕСКД детали — классы 71–76", drw.first_page,
                         tb.bboxes.get("designation"), "Классификатор ЕСКД")
@@ -475,7 +475,7 @@ def check_title(drw: Drawing, cfg: dict, spec_item: dict | None) -> None:
         pass                                           # групповой чертёж: «см. табл.» (ГОСТ 2.113)
     elif mass is None:
         drw.add(WARNING, "B01", CAT_TB, "Масса в основной надписи не указана (графа 5)", drw.first_page,
-                None, "ГОСТ 2.109-73")
+                None, "ГОСТ Р 2.109-2023 п. 5.17")
     else:
         mass_tol_cfg = cfg.get("mass", {})
         ref = None
@@ -524,14 +524,14 @@ def check_title(drw: Drawing, cfg: dict, spec_item: dict | None) -> None:
     mat = drw.facts.get("material", {})
     if not is_asm and not tb.material:
         drw.add(WARNING, "B07", CAT_TB, "Не указан материал детали (графа 3)", drw.first_page, None,
-                "ГОСТ 2.109-73")
+                "ГОСТ Р 2.109-2023 п. 6.3")
     elif not is_asm and mat.get("grade") and not mat.get("sortament"):
         th = [d for d in drw.dims if d.kind == "thickness" or
               (d.reference and drw.facts.get("spec_material", {}).get("size") == d.nominal)]
         if th or drw.facts.get("spec_material", {}).get("sortament"):
             drw.add(WARNING, "B13", CAT_TB, f"В графе 3 указана только марка «{tb.material}» без сортамента; для "
                     f"детали из проката записывают «Лист 5 ГОСТ 19903-2015 / Ст3сп ГОСТ 14637-89»",
-                    drw.first_page, tb.bboxes.get("material"), "ГОСТ 2.109-73")
+                    drw.first_page, tb.bboxes.get("material"), "ГОСТ Р 2.109-2023 п. 6.4")
     s_mat = mat.get("size") if mat.get("sortament") in ("Лист", "Полоса", "Плита") else None
     if s_mat:
         for d in drw.dims:
@@ -555,7 +555,7 @@ def check_title(drw: Drawing, cfg: dict, spec_item: dict | None) -> None:
                 drw.add(WARNING, "B05", CAT_TB, f"В штампе формат {tb.format}, а лист {fmtn(round(p0.width))}×"
                         f"{fmtn(round(p0.height))} мм", drw.first_page, tb.bboxes.get("format"), "ГОСТ 2.301-68")
     sc = tb.scale.replace(" ", "")
-    if sc and sc not in SCALES:
+    if sc and not scale_ok(sc):
         k = _scale_factor(sc)
         hint = ""
         if k and k > 1 and f"1:{fmtn(round(k, 2))}" in SCALES:

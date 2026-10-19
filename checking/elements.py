@@ -108,7 +108,7 @@ def _threads_angles(drw: Drawing) -> None:
         pg, bb = d.page, d.bbox
         if d.kind == "chamfer" and d.angle and abs(d.angle - 45) > 1e-6:
             drw.add(WARNING, "D21", CAT_DIM, f"Фаска «{d.raw}» не под 45°: такие фаски задают двумя линейными или "
-                    f"линейным и угловым размерами, запись «a×α» — только для 45°", pg, bb, "ГОСТ 2.307-2011")
+                    f"линейным и угловым размерами, запись «a×α» — только для 45°", pg, bb, "ГОСТ 2.307-2011 п. 5.44")
         elif d.kind == "angle" and d.nominal is not None:
             deg = d.nominal
             mm = re.search(r"°\s*(\d+)\s*['′]", d.raw)
@@ -140,5 +140,5 @@ def _threads_angles(drw: Drawing) -> None:
             from .titleblock import excluded
             if not excluded(drw, ln):
                 drw.add(WARNING, "D22", CAT_DIM, f"Размер «{ln.text.strip()}» с единицами: линейные размеры на чертеже "
-                        f"указывают в миллиметрах без обозначения единицы", ln.page, ln.bbox, "ГОСТ 2.307-2011")
+                        f"указывают в миллиметрах без обозначения единицы", ln.page, ln.bbox, "ГОСТ 2.307-2011 п. 4.7")
                 break

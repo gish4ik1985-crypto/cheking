@@ -1,7 +1,7 @@
 """Сборочные чертежи и спецификация на поле чертежа.
 
-* ГОСТ 2.109-73 разд. 3: размеры на сборочном чертеже (п. 3.1.2), номера позиций по спецификации (п. 3.2.1),
-  один раз (п. 3.2.4), шрифт на 1–2 номера больше размерных чисел (п. 3.2.5);
+* ГОСТ Р 2.109-2023 разд. 7: размеры на сборочном чертеже (п. 7.1.2), номера позиций по спецификации (п. 7.3.1),
+  один раз (п. 7.3.4), шрифт на 1–2 номера больше размерных чисел (п. 7.3.4, примечание);
 * ГОСТ 2.106: сквозная нумерация позиций, количество, порядок разделов, совмещение спецификации
   со сборочным чертежом — только на формате А4 (форма 1).
 """
@@ -12,10 +12,10 @@ from collections import Counter
 
 from .model import Drawing, Word, ERROR, WARNING, INFO, CAT_ASM
 
-STD_SB = "ГОСТ 2.109-73"
-STD_SP = "ГОСТ 2.106-2019"
-SECTIONS = ["документация", "комплексы", "сборочные единицы", "детали", "стандартные изделия", "прочие изделия",
-            "материалы", "комплекты"]
+STD_SB = "ГОСТ Р 2.109-2023"
+STD_SP = "ГОСТ Р 2.106-2019"
+SECTIONS = ["документация", "комплексы", "сборочные единицы", "детали", "программные изделия и базы данных",
+            "стандартные изделия", "прочие изделия", "материалы", "комплекты"]
 SECTIONS_RU = [s[0].upper() + s[1:] for s in SECTIONS]
 COLS = [("pos", r"^поз"), ("des", r"^обозначен"), ("name", r"^наименован"), ("qty", r"^кол"),
         ("note", r"^приме"), ("fmt", r"^формат"), ("zone", r"^зона"), ("mass", r"^масса")]
@@ -129,7 +129,7 @@ def _items(words, pg, X0, X1, y0, y1, cols):
             items.append({"pos": int(pos) if re.fullmatch(r"\d{1,3}", pos) else None,
                           "designation": cells.get("des", ""), "name": name, "qty": cells.get("qty", ""),
                           "note": cells.get("note", ""), "mass": cells.get("mass", ""), "section": section,
-                          "bbox": bbox})
+                          "fmt": cells.get("fmt", ""), "bbox": bbox})
         elif items and not fresh and (name or cells.get("qty") or cells.get("note")):
             it = items[-1]                                   # продолжение строки (материал, длина)
             it["name"] = (it["name"] + " " + name).strip()
@@ -150,6 +150,28 @@ def _format_a4(drw: Drawing, pg: int) -> bool:
     return bool(p) and abs(min(p.width, p.height) - 210) < 4 and abs(max(p.width, p.height) - 297) < 4
 
 
+def compare_positions(drw: Drawing, children: list, src: str) -> None:
+    """Номера позиций на чертеже и составные части загруженной СП (Excel или спецификация КОМПАС в PDF):
+    позиции составных частей, кроме материалов, документации и комплектов."""
+    positions = drw.facts.get("positions") or []
+    nums = [p["n"] for p in positions]
+    exp = {}
+    for c in children:
+        last = (c.get("pos") or "").rsplit(".", 1)[-1]
+        if last.isdigit() and c.get("_section") not in ("Материалы", "Документация", "Комплекты"):
+            exp[int(last)] = c
+    missing = sorted(set(exp) - set(nums))
+    extra = sorted(set(nums) - set(exp))
+    if missing and exp:
+        drw.add(WARNING, "A01", CAT_ASM, f"По {src} на чертеже нет позиций: "
+                + "; ".join(f"{n} {exp[n].get('name') or exp[n].get('designation')}" for n in missing[:10]),
+                drw.first_page, None, "ГОСТ Р 2.109-2023 п. 7.3.1")
+    for n in extra:
+        p = next(x for x in positions if x["n"] == n)
+        drw.add(ERROR, "A02", CAT_ASM, f"Позиция {n} есть на чертеже, но её нет в {src}", p["page"], p["bbox"],
+                "ГОСТ Р 2.109-2023 п. 7.3.1")
+
+
 def check_assembly(drw: Drawing, cfg: dict) -> None:
     tables = drw.facts.get("tables") or []
     spec = next((t for t in tables if t["kind"] == "spec"), None)
@@ -166,7 +188,7 @@ def check_assembly(drw: Drawing, cfg: dict) -> None:
     if not drw.ocr and not [d for d in drw.dims if d.kind in ("linear", "diameter", "square", "radius")]:
         drw.add(WARNING, "A05", CAT_ASM, "На сборочном чертеже нет размеров: указывают габаритные, установочные и "
                 "присоединительные размеры (кроме сборочных единиц, не поставляемых самостоятельно)", pg0, None,
-                "ГОСТ 2.109-73 п. 3.1.2")
+                "ГОСТ Р 2.109-2023 п. 7.1.2")
 
     # номера позиций
     nums = [p["n"] for p in positions]
@@ -177,51 +199,35 @@ def check_assembly(drw: Drawing, cfg: dict) -> None:
         extra = sorted(set(nums) - spec_pos)
         if missing and positions:
             drw.add(WARNING, "A01", CAT_ASM, f"Позиции спецификации не указаны на чертеже: "
-                    f"{', '.join(map(str, missing))}", spec["page"], spec["bbox"], "ГОСТ 2.109-73 п. 3.2.1")
+                    f"{', '.join(map(str, missing))}", spec["page"], spec["bbox"], "ГОСТ Р 2.109-2023 п. 7.3.1")
         elif missing:
             drw.add(WARNING, "A01", CAT_ASM, f"Номера позиций {', '.join(map(str, missing))} на чертеже не найдены — "
                     f"их наносят на полках линий-выносок шрифтом крупнее размерных чисел", spec["page"], spec["bbox"],
-                    "ГОСТ 2.109-73 п. 3.2.1")
+                    "ГОСТ Р 2.109-2023 п. 7.3.1")
         for n in extra:
             p = next(x for x in positions if x["n"] == n)
             drw.add(ERROR, "A02", CAT_ASM, f"Позиция {n} есть на чертеже, но её нет в спецификации", p["page"],
-                    p["bbox"], "ГОСТ 2.109-73 п. 3.2.1")
+                    p["bbox"], "ГОСТ Р 2.109-2023 п. 7.3.1")
     elif drw.facts.get("spec_children"):
-        # спецификация — отдельный документ (загруженная СП): позиции составных частей, кроме материалов
-        src = drw.facts.get("spec_children_src", "спецификации")
-        exp = {}
-        for c in drw.facts["spec_children"]:
-            last = (c.get("pos") or "").rsplit(".", 1)[-1]
-            if last.isdigit() and c.get("_section") not in ("Материалы", "Документация", "Комплекты"):
-                exp[int(last)] = c
-        missing = sorted(set(exp) - set(nums))
-        extra = sorted(set(nums) - set(exp))
-        if missing and exp:
-            drw.add(WARNING, "A01", CAT_ASM, f"По {src} на чертеже нет позиций: "
-                    + "; ".join(f"{n} {exp[n].get('name') or exp[n].get('designation')}" for n in missing[:10]),
-                    pg0, None, "ГОСТ 2.109-73 п. 3.2.1")
-        for n in extra:
-            p = next(x for x in positions if x["n"] == n)
-            drw.add(ERROR, "A02", CAT_ASM, f"Позиция {n} есть на чертеже, но её нет в {src}", p["page"], p["bbox"],
-                    "ГОСТ 2.109-73 п. 3.2.1")
+        compare_positions(drw, drw.facts["spec_children"], drw.facts.get("spec_children_src", "спецификации"))
     elif nums:
         gaps = sorted(set(range(1, max(nums) + 1)) - set(nums))
         if gaps:
             drw.add(INFO, "A03", CAT_ASM, f"Номера позиций на чертеже: {', '.join(map(str, sorted(set(nums))))} — нет "
-                    f"{', '.join(map(str, gaps))}. Сверьте со спецификацией", pg0, None, "ГОСТ 2.109-73 п. 3.2.1")
+                    f"{', '.join(map(str, gaps))}. Сверьте со спецификацией", pg0, None, "ГОСТ Р 2.109-2023 п. 7.3.1")
     rep = sorted(n for n, k in cnt.items() if k > 1)
     if rep:
         p = [x for x in positions if x["n"] == rep[0]][1]
         drw.add(INFO, "A06", CAT_ASM, f"Номера позиций указаны повторно: {', '.join(f'{n} ({cnt[n]} раза)' for n in rep)} "
                 f"— номер позиции наносят, как правило, один раз (повторно — для одинаковых составных частей)",
-                p["page"], p["bbox"], "ГОСТ 2.109-73 п. 3.2.4")
+                p["page"], p["bbox"], "ГОСТ Р 2.109-2023 п. 7.3.4")
     font = drw.facts.get("dim_font")
     small = [p for p in positions if font and p["size"] < 1.15 * font]
     if small:
         p = small[0]
         drw.add(WARNING, "A04", CAT_ASM, f"Номера позиций ({', '.join(str(x['n']) for x in small[:8])}) выполнены "
                 f"шрифтом размерных чисел — шрифт номеров позиций на 1–2 номера больше", p["page"], p["bbox"],
-                "ГОСТ 2.109-73 п. 3.2.5")
+                "ГОСТ Р 2.109-2023 п. 7.3.4 (примечание)")
 
     # спецификация на поле чертежа
     if not spec:
@@ -230,12 +236,11 @@ def check_assembly(drw: Drawing, cfg: dict) -> None:
     if re.search(r"(?<![А-Я])СБ(?![А-Я])", tb.designation or "") and "fmt" in spec["cols"]:
         drw.add(WARNING, "A14", CAT_ASM, f"Спецификация совмещена со сборочным чертежом, а в обозначении «{tb.designation}» "
                 f"код «СБ» — совмещённому документу присваивают обозначение основного конструкторского документа "
-                f"(спецификации), без кода", pg0, tb.bboxes.get("designation"), "ГОСТ 2.106-96 п. 3.19")
+                f"(спецификации), без кода", pg0, tb.bboxes.get("designation"), "ГОСТ Р 2.106-2019 п. 4.2.19")
     # правила ГОСТ 2.106 к содержимому (обозначения, стандарты, сортировка)
-    from .specdoc import check_children, section_of
+    from .specdoc import QTY_MARK, QTY_OPTIONAL, canon_section, check_children, section_of
     for it in spec["items"]:
-        it["_section"] = next((s for s in SECTIONS_RU if (it.get("section") or "").lower().startswith(s.lower()[:6])),
-                              None) or section_of({**it, "sku": it["designation"] if re.fullmatch(r"\d{3}-\d{6}",
+        it["_section"] = canon_section(it.get("section")) or section_of({**it, "sku": it["designation"] if re.fullmatch(r"\d{3}-\d{6}",
                                                   it["designation"] or "") else ""}, False)
         if re.fullmatch(r"\d{3}-\d{6}", it["designation"] or ""):
             it["designation_is_sku"] = True
@@ -257,8 +262,9 @@ def check_assembly(drw: Drawing, cfg: dict) -> None:
         drw.add(WARNING, "A07", CAT_ASM, f"Позиции в спецификации: {', '.join(map(str, pos))} — номера позиций "
                 f"проставляют по порядку записи, без повторов", sp, bb, STD_SP)
     for it in items:
-        if it["pos"] and not re.search(r"\d", it["qty"] or "") and (it["section"] or "").lower() not in (
-                "документация", "комплекты"):
+        sec = canon_section(it["section"])
+        mark = sec == "Материалы" and QTY_MARK.search(f"{it['qty'] or ''} {it['note'] or ''}")
+        if it["pos"] and not re.search(r"\d", it["qty"] or "") and sec not in QTY_OPTIONAL and not mark:
             drw.add(ERROR, "A08", CAT_ASM, f"Позиция {it['pos']} «{it['designation'] or it['name']}»: не указано "
                     f"количество", sp, it["bbox"], STD_SP)
     des = Counter(it["designation"].replace(" ", "") for it in items if it["designation"])

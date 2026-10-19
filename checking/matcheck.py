@@ -1,4 +1,4 @@
-"""Запись материала в графе 3 (ГОСТ 2.109-73): вид сортамента, стандарт на сортамент и на марку."""
+"""Запись материала в графе 3 (ГОСТ Р 2.109-2023): вид сортамента, стандарт на сортамент и на марку."""
 from __future__ import annotations
 
 import re
@@ -40,14 +40,14 @@ def check_material(drw: Drawing, cfg: dict) -> None:
         if words:
             w = "Круг" if {"Круг", "Пруток"} <= words else " / ".join(sorted(words))
             drw.add(WARNING, "M01", CAT_TB, f"В графе 3 «{raw}» по ГОСТ {num_stds[0]} не указан вид сортамента — "
-                    f"«{w} …»", pg, bb, "ГОСТ 2.109-73")
+                    f"«{w} …»", pg, bb, "ГОСТ Р 2.109-2023 п. 6.4")
     # стандарт на сортамент не того вида
     if sort in SORTAMENT_STANDARDS:
         for s in num_stds:
             other = SORTAMENT_BY_STANDARD.get(s)
             if other and sort not in other:
                 drw.add(WARNING, "M03", CAT_TB, f"«{sort}» по ГОСТ {s}: этот стандарт — на "
-                        f"{', '.join(sorted(other)).lower()}, а не на {sort.lower()}", pg, bb, "ГОСТ 2.109-73")
+                        f"{', '.join(sorted(other)).lower()}, а не на {sort.lower()}", pg, bb, "ГОСТ Р 2.109-2023 п. 6.4")
     # стандарт на марку
     grade = mat.get("grade")
     fam = _family(grade) if grade else None
@@ -56,4 +56,4 @@ def check_material(drw: Drawing, cfg: dict) -> None:
         for s in STD_NUM.findall(grade_part):
             if s in GRADE_MAIN_STANDARDS and s not in allowed:
                 drw.add(WARNING, "M02", CAT_TB, f"Марка {grade} ({name} сталь/сплав) указана по ГОСТ {s}; марки этой "
-                        f"группы — по ГОСТ {main}", pg, bb, "ГОСТ 2.109-73")
+                        f"группы — по ГОСТ {main}", pg, bb, "ГОСТ Р 2.109-2023 п. 6.5")

@@ -9,9 +9,9 @@ import threading
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from .config import ROOT
+from .config import DATA
 
-PATH = os.path.join(ROOT, "admin.json")
+PATH = os.path.join(DATA, "admin.json")
 _LOCK = threading.Lock()
 
 

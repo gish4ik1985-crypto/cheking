@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Вход — проверка чертежей</title>
+<link rel="stylesheet" href="/static/style.css?v=20261015">
+</head>
+<body>
+<div class="login-box card">
+  <h1>Проверка чертежей</h1>
+  <p class="muted">Войдите под своим именем. Учётную запись создаёт администратор.</p>
+  <form id="f">
+    <label>Имя пользователя<input type="text" id="name" autocomplete="username" autofocus></label>
+    <label>Пароль<input type="password" id="pwd" autocomplete="current-password"></label>
+    <div id="err" class="error-box" hidden></div>
+    <button class="btn primary" type="submit">Войти</button>
+  </form>
+</div>
+<script>
+document.getElementById('f').onsubmit = async ev => {
+  ev.preventDefault();
+  const r = await fetch('/api/login', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name: document.getElementById('name').value, password: document.getElementById('pwd').value})});
+  if (r.ok) {
+    const next = new URLSearchParams(location.search).get('next') || '/';
+    location.href = next.startsWith('/') && !next.startsWith('//') ? next : '/';
+  } else {
+    const e = document.getElementById('err'); e.hidden = false; e.textContent = (await r.json()).error || 'Ошибка входа';
+  }
+};
+</script>
+</body>
+</html>

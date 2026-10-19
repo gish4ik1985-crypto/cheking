@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import re
 
-from .textnorm import norm_designation, to_float
+from .textnorm import norm_designation, strip_doc_code, to_float
 
 FIELDS = ("designation", "name", "material", "grade", "mass", "sku", "base_size", "blank_size",
           "blank_type", "section", "pos", "note")
@@ -104,6 +104,7 @@ class Spec:
     def __init__(self, path: str):
         self.path = path
         self.items: dict[str, dict] = {}
+        self.items_nc: dict[str, dict] = {}          # то же без кода документа (СБ, ВО…)
         self.by_sku: dict[str, dict] = {}
         self.rows: list[dict] = []
         self.columns: dict[str, int] = {}
@@ -131,6 +132,7 @@ class Spec:
             item["mass"] = item["mass"] if isinstance(item.get("mass"), (int, float)) else to_float(
                 str(item.get("mass") or "").replace(" ", "") or None)
             q = item.get("qty")
+            item["qty_raw"] = "" if q is None else str(q)
             item["qty"] = q if isinstance(q, (int, float)) else to_float(str(q or "").replace(" ", "") or None)
             for k in ("name", "material", "grade", "sku", "base_size", "blank_size", "blank_type", "section",
                       "pos", "note", "unit", "parent_sku", "parent_des", "parent_name"):
@@ -140,6 +142,7 @@ class Spec:
             self.rows.append(item)
             if des:
                 self.items.setdefault(norm_designation(des), item)
+                self.items_nc.setdefault(strip_doc_code(des), item)
             if sku:
                 self.by_sku.setdefault(sku, item)
         if not header_found:
@@ -147,6 +150,8 @@ class Spec:
 
     def find(self, designation: str, sku: str | None = None) -> dict | None:
         hit = self.items.get(norm_designation(designation)) if designation else None
+        if hit is None and designation:               # сборочный чертёж «…001 СБ» — изделие «…001» спецификации
+            hit = self.items_nc.get(strip_doc_code(designation))
         if hit is None and sku:
             hit = self.by_sku.get(sku)
         return hit

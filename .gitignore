@@ -11,3 +11,8 @@ build/
 samples/
 config.json
 .claude/
+users.json
+feedback/
+
+# данные пользователей exe (обновление программы их не трогает)
+data/

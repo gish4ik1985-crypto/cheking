@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
-datas, binaries, hiddenimports = [("web", "web")], [], []
+datas, binaries, hiddenimports = [("web", "web"), ("standards", "standards"), ("frontend/dist", "frontend/dist")], [], []
 for pkg in ("rapidocr", "onnxruntime", "pymupdf", "ezdxf", "docx", "openpyxl", "xlrd", "waitress"):
     d, b, h = collect_all(pkg)
     datas += d; binaries += b; hiddenimports += h

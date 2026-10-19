@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Настройки проверки</title>
-<link rel="stylesheet" href="/static/style.css?v=20261012">
+<link rel="stylesheet" href="/static/style.css?v=20261022">
 </head>
 <body>
 <div class="topbar">
@@ -14,56 +14,54 @@
     <div class="muted">Какие проверки выполнять и с какой важностью — для всех пользователей программы</div>
   </div>
   <div class="spacer"></div>
-  <button class="btn" id="logout" hidden>Выйти</button>
   <a class="btn" href="/">К проверке</a>
 </div>
 
 <div class="wrap wide">
-  <div id="login" class="card" hidden>
-    <h2>Вход администратора</h2>
-    <p class="muted">Настройки защищены паролем.</p>
-    <form id="login-form" class="inline-form">
-      <input type="password" id="pwd" placeholder="Пароль" autocomplete="current-password">
-      <button class="btn primary" type="submit">Войти</button>
-    </form>
-    <div id="login-err" class="error-box" hidden></div>
-  </div>
-
   <div id="app" hidden>
     <div id="banner"></div>
     <div class="tabs admin-tabs">
-      <button data-tab="rules" class="active">Проверки по ГОСТ</button>
+      <button data-tab="rules" class="active">Проверки по стандартам</button>
       <button data-tab="custom">Свои правила</button>
       <button data-tab="params">Параметры</button>
       <button data-tab="lists">Справочники</button>
       <button data-tab="ex">Исключения «не ошибка»</button>
-      <button data-tab="access">Доступ</button>
+      <button data-tab="users">Пользователи</button>
+      <button data-tab="norms">Нормативы</button>
+      <button data-tab="review">Отметки тестеров</button>
+      <button data-tab="log">Журнал действий</button>
     </div>
 
     <section id="tab-rules">
-      <div class="toolbar">
-        <div class="seg" id="view-switch">
-          <button data-view="list" class="active">Списком</button>
-          <button data-view="groups">По ГОСТам</button>
+      <div class="rules-layout">
+        <aside class="rnav">
+          <div class="seg nav-mode" id="nav-mode">
+            <button data-mode="groups" class="active">По разделам</button>
+            <button data-mode="std">По стандартам</button>
+          </div>
+          <input type="text" id="q" placeholder="Поиск: ГОСТ, код, текст…" autocomplete="off">
+          <select id="rnav-select" aria-label="Группа проверок"></select>
+          <nav id="rnav"></nav>
+        </aside>
+        <div class="rmain">
+          <div class="toolbar">
+            <div class="seg" id="f-state">
+              <button data-state="" class="active">Все</button>
+              <button data-state="on">Включённые</button>
+              <button data-state="off">Выключенные</button>
+              <button data-state="changed">Изменённые</button>
+              <button data-state="notes" title="Проверки, по которым есть мнение эксперта">С мнением</button>
+              <button data-state="todo" title="Проверки, которые ещё не отмечены как утверждённые">Не утверждены</button>
+              <button data-state="done" title="Проверки, отмеченные как утверждённые">Утверждены</button>
+            </div>
+            <span class="spacer"></span>
+            <span class="muted small" id="summary"></span>
+            <button class="btn" id="docs-toggle" title="Показать или скрыть описание «что и как проверяется» у всех проверок на экране">Описания</button>
+            <button class="btn" id="reset-rules" title="Вернуть включение и важность всех проверок, как задано в программе">По умолчанию</button>
+          </div>
+          <div id="groups"></div>
         </div>
-        <input type="text" id="q" placeholder="Поиск: ГОСТ, код или текст проверки…">
-        <select id="f-state" title="Показать">
-          <option value="">Все проверки</option>
-          <option value="on">Включённые</option>
-          <option value="off">Выключенные</option>
-          <option value="changed">Изменённые</option>
-        </select>
-        <select id="f-group" title="Группа"><option value="">Все группы</option></select>
       </div>
-      <div class="toolbar">
-        <span class="muted" id="summary"></span>
-        <span class="spacer"></span>
-        <button class="btn" id="bulk-on" title="Включить все проверки, показанные в списке">Включить показанные</button>
-        <button class="btn" id="bulk-off" title="Выключить все проверки, показанные в списке">Выключить показанные</button>
-        <button class="btn" id="expand" hidden>Развернуть всё</button>
-        <button class="btn" id="reset-rules" title="Включить проверки, как задано в программе по умолчанию">По умолчанию</button>
-      </div>
-      <div id="groups"></div>
     </section>
 
     <section id="tab-custom" hidden>
@@ -99,6 +97,7 @@
           <label>Документы<select id="cr-applies"></select></label>
           <label>…если материал содержит <span class="muted">(необязательно)</span><input type="text" id="cr-material" placeholder="09Г2С"></label>
           <label>…если обозначение начинается с <span class="muted">(необязательно)</span><input type="text" id="cr-prefix" placeholder="ДТМЛ."></label>
+          <label>…если в тексте чертежа есть <span class="muted">(регулярное выражение, необязательно)</span><input type="text" id="cr-when" placeholder="ОСТ\s*4\s*Г[О0]\.?070\.?014"></label>
         </div>
         <h3 class="sub">Замечание</h3>
         <div class="grid-form">
@@ -183,16 +182,63 @@
       </div>
     </section>
 
-    <section id="tab-access" hidden>
+    <section id="tab-users" hidden>
       <div class="card">
-        <h2>Пароль администратора</h2>
-        <div id="pwd-state" class="muted"></div>
-        <form id="pwd-form" class="grid-form" style="margin-top:12px">
-          <label id="old-wrap">Текущий пароль<input type="password" id="pwd-old" autocomplete="current-password"></label>
-          <label>Новый пароль <span class="muted">(пусто — снять пароль)</span><input type="password" id="pwd-new" autocomplete="new-password"></label>
-          <div><button class="btn primary" type="submit">Сохранить пароль</button></div>
+        <h2>Пользователи</h2>
+        <p class="hint">Учётные записи создаёт администратор. Администратор видит все отчёты и действия, настраивает проверки.</p>
+        <div id="u-list"></div>
+        <h3 class="sub">Новый пользователь</h3>
+        <form id="u-form" class="inline-form" style="flex-wrap:wrap">
+          <input type="text" id="u-name" placeholder="Имя" autocomplete="off">
+          <input type="password" id="u-pwd" placeholder="Пароль" autocomplete="new-password">
+          <select id="u-role"><option value="user">пользователь</option><option value="admin">администратор</option></select>
+          <button class="btn primary" type="submit">Создать</button>
         </form>
-        <div id="pwd-msg"></div>
+        <div id="u-msg"></div>
+      </div>
+    </section>
+
+    <section id="tab-norms" hidden>
+      <div class="card">
+        <h2>Нормативы</h2>
+        <p class="hint">Тексты стандартов в PDF, на которых основаны проверки. «Открыть» показывает стандарт, поиск ищет фразу по тексту всех стандартов.
+          В отчёте у замечаний администратора есть ссылка «ГОСТ» — она открывает стандарт на нужной странице, чтобы обосновать замечание перед автором чертежа.
+          Файлы, добавленные здесь, хранятся в папке data/standards и при обновлении программы не пропадают; файлы из поставки (метка «программа») удалить нельзя.</p>
+        <div class="toolbar">
+          <input type="file" id="nm-file" accept=".pdf,application/pdf">
+          <input id="nm-des" placeholder="Обозначение, например ГОСТ Р 2.316-2023" style="min-width:280px">
+          <input id="nm-title" placeholder="Название" style="min-width:280px">
+          <button class="btn primary" id="nm-add">Добавить PDF</button>
+        </div>
+        <div class="toolbar">
+          <input id="nm-q" placeholder="Поиск по тексту стандартов (от 3 знаков)" style="min-width:340px">
+          <button class="btn" id="nm-find">Найти</button>
+        </div>
+        <div id="nm-found" style="margin:8px 0"></div>
+        <div id="nm-body" class="muted">Загрузка…</div>
+      </div>
+    </section>
+
+    <section id="tab-review" hidden>
+      <div class="card">
+        <h2>Отметки тестеров</h2>
+        <p class="hint">Что тестеры отметили в отчётах: замечания «верно» / «ложное», пропуски и ошибки разбора.
+          Ложные срабатывания по правилам — основание ослабить или отключить правило; пропуски — задания на новые правила.</p>
+        <div class="toolbar">
+          <a class="btn primary" href="/api/admin/export.zip">Выгрузить для разработки (ZIP)</a>
+          <a class="btn" href="/api/admin/export.zip?all=1" title="Включая проверки без отметок">ZIP со всеми проверками</a>
+          <button class="btn" id="rv-reload">Обновить</button>
+        </div>
+        <div id="rv-body" class="muted" style="margin-top:12px">Загрузка…</div>
+      </div>
+    </section>
+
+    <section id="tab-log" hidden>
+      <div class="card">
+        <h2>Журнал действий</h2>
+        <div class="toolbar"><select id="log-user"><option value="">все пользователи</option></select>
+          <button class="btn" id="log-reload">Обновить</button></div>
+        <div id="log-body" class="muted" style="margin-top:12px">Загрузка…</div>
       </div>
     </section>
   </div>
@@ -207,7 +253,7 @@
 
 <script>
 const SEV = {'': 'как в правиле', error: 'Ошибка', warning: 'Предупреждение', info: 'Замечание'};
-let S = null, orig = null, rules = {}, params = {}, lists = {}, open = new Set(), dirty = false;
+let S = null, orig = null, rules = {}, params = {}, lists = {}, dirty = false;
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -215,50 +261,77 @@ const clone = o => JSON.parse(JSON.stringify(o));
 async function load() {
   const r = await fetch('/api/admin/state');
   const j = await r.json();
-  if (r.status === 401) {
-    document.getElementById('login').hidden = false;
-    document.getElementById('app').hidden = true;
-    return;
-  }
+  if (r.status === 401 || r.status === 403) { location.href = '/login?next=/admin'; return; }
   S = j;
   rules = {};
-  for (const g of j.groups) for (const x of g.rules) rules[x.code] = {enabled: x.enabled, severity: x.severity || ''};
+  byCode = {};
+  for (const g of j.groups) for (const x of g.rules) { rules[x.code] = {enabled: x.enabled, severity: x.severity || ''}; byCode[x.code] = {g, x}; }
   params = clone(j.params);
   lists = clone(j.lists);
-  orig = clone({rules, params, lists});
-  document.getElementById('login').hidden = true;
+  modules = {};
+  for (const s of j.sections) if (s.module) modules[s.key] = s.module.enabled;
+  orig = clone({rules, params, lists, modules});
   document.getElementById('app').hidden = false;
-  document.getElementById('logout').hidden = !j.auth.password_set;
-  document.getElementById('banner').innerHTML = j.auth.password_set ? '' :
-    `<div class="banner">Пароль администратора не задан — настройки может изменить любой, кто открыл программу.
-     Задайте пароль на вкладке «Доступ».</div>`;
-  const fg = document.getElementById('f-group');
-  fg.innerHTML = '<option value="">Все группы</option>' + j.groups.map(g => `<option value="${g.key}">${esc(g.title)}</option>`).join('');
-  renderRules(); renderParams(); renderLists(); renderAccess(); loadExceptions(); renderCustom(); loadJobs();
+  renderRules(); renderParams(); renderLists(); renderUsers(); loadExceptions(); renderCustom(); loadJobs(); loadExpert();
   setDirty();
 }
 
 function setDirty() {
-  const now = JSON.stringify({rules, params, lists});
+  const now = JSON.stringify({rules, params, lists, modules});
   dirty = now !== JSON.stringify(orig);
   let n = 0;
   for (const c in rules) if (rules[c].enabled !== orig.rules[c].enabled || rules[c].severity !== orig.rules[c].severity) n++;
+  for (const k in modules) if (modules[k] !== orig.modules[k]) n++;
   document.getElementById('savebar').hidden = !dirty;
   document.getElementById('dirty-text').textContent = n ? `Изменено проверок: ${n}` +
     (JSON.stringify({params, lists}) !== JSON.stringify({params: orig.params, lists: orig.lists}) ? ' и параметры' : '') :
     'Изменены параметры';
   const all = Object.keys(rules).length, on = Object.values(rules).filter(r => r.enabled).length;
-  document.getElementById('summary').textContent = `Включено ${on} из ${all} проверок`;
+  const off = S.groups.filter(g => modOff(g)).reduce((a, g) => a + groupOn(g), 0);
+  document.getElementById('summary').textContent = `Включено ${on - off} из ${all} проверок` + (off ? ` · ещё ${off} ждут включения блока` : '');
 }
 
 // ----------------------------------------------------------------- проверки
-let view = 'list';
-try { view = localStorage.getItem('admin-view') || 'list'; } catch (e) {}
+// Слева — разделы и группы (по стандартам), справа — обзор или выбранная группа: стандарты, пункты, проверки.
+let sel = 'overview', fstate = '';
+try { sel = localStorage.getItem('admin-group') || 'overview'; } catch (e) {}
+let navMode = 'groups', selStd = null, byCode = {}, openDocs = new Set(), expertNotes = {}, noteStatuses = {}, noteDraft = {}, reviews = {};
+try { navMode = localStorage.getItem('admin-nav') === 'std' ? 'std' : 'groups'; selStd = localStorage.getItem('admin-std') || null; } catch (e) {}
+const SEV_SHORT = {error: 'Ошибка', warning: 'Предупр.', info: 'Замечание'};
+
+const effSev = x => rules[x.code].severity || x.typical;
+const isChanged = x => rules[x.code].enabled !== x.default || !!rules[x.code].severity;
+const searching = () => !!document.getElementById('q').value.trim();
+const groupOn = g => g.rules.filter(x => rules[x.code].enabled).length;
+let modules = {};
+const secOf = key => S.sections.find(s => s.key === key);
+const modOff = g => { const s = secOf(g.section); return !!(s && s.module && !modules[s.key]); };
+const modBlock = s => s.module ? `<div class="mod-head ${modules[s.key] ? 'on' : ''}"><div><b>${modules[s.key] ? 'Блок включён' : 'Блок выключен'}</b>
+  <div class="muted small">${esc(s.module.descr)} Проверки этого блока не смешиваются с проверками ЕСКД: пока блок выключен, их замечаний нет ни в одном отчёте.</div></div>
+  <label class="switch" title="Включить или выключить весь блок"><input type="checkbox" class="mcheck" data-m="${s.key}" ${modules[s.key] ? 'checked' : ''}><span></span></label></div>` : '';
+function matches(g, x) {
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  const st = rules[x.code];
+  if (q && !(g.title + ' ' + g.standards + ' ' + x.code + ' ' + x.text).toLowerCase().includes(q)) return false;
+  if (fstate === 'notes' && !(expertNotes[x.code] || []).length) return false;
+  if (fstate === 'todo' && reviews[x.code]) return false;
+  if (fstate === 'done' && !reviews[x.code]) return false;
+  return !((fstate === 'on' && !st.enabled) || (fstate === 'off' && st.enabled) || (fstate === 'changed' && !isChanged(x)));
+}
+function visible() {
+  const out = [];
+  for (const g of S.groups) {
+    if (!(sel === 'overview' || sel === g.key || searching())) continue;
+    for (const x of g.rules) if (matches(g, x)) out.push({g, x});
+  }
+  return out;
+}
 
 function sevSelect(x, locked) {
   const st = rules[x.code];
-  return `<select class="rsev" data-c="${x.code}" ${locked ? 'disabled' : ''} title="Важность замечания">
-    ${Object.entries(SEV).map(([k, v]) => `<option value="${k}" ${st.severity === k ? 'selected' : ''}>${k ? v : 'Как в правиле'}</option>`).join('')}
+  return `<select class="rsev sev-${effSev(x)}" data-c="${x.code}" ${locked ? 'disabled' : ''} title="Важность замечания">
+    <option value="" ${!st.severity ? 'selected' : ''}>${SEV_SHORT[x.typical]} (обычно)</option>
+    ${['error', 'warning', 'info'].filter(k => k !== x.typical).map(k => `<option value="${k}" ${st.severity === k ? 'selected' : ''}>${SEV_SHORT[k]}</option>`).join('')}
   </select>`;
 }
 function toggle(x, locked) {
@@ -266,104 +339,328 @@ function toggle(x, locked) {
   return `<label class="switch" title="${locked ? 'Служебное сообщение — отключить нельзя' : on ? 'Выключить проверку' : 'Включить проверку'}">
     <input type="checkbox" class="rcheck" data-c="${x.code}" ${on ? 'checked' : ''} ${locked ? 'disabled' : ''}><span></span></label>`;
 }
-function visible() {
-  const q = document.getElementById('q').value.trim().toLowerCase();
-  const fs = document.getElementById('f-state').value, fg = document.getElementById('f-group').value;
-  const out = [];
-  for (const g of S.groups) {
-    if (fg && g.key !== fg) continue;
-    for (const x of g.rules) {
-      const st = rules[x.code], changed = st.enabled !== x.default || !!st.severity;
-      if (q && !(g.title + ' ' + g.standards + ' ' + x.code + ' ' + x.text).toLowerCase().includes(q)) continue;
-      if ((fs === 'on' && !st.enabled) || (fs === 'off' && st.enabled) || (fs === 'changed' && !changed)) continue;
-      out.push({g, x, changed});
-    }
-  }
-  return out;
+function groupSwitch(g) {
+  const on = groupOn(g);
+  return `<label class="switch" title="Включить или выключить все проверки группы">
+    <input type="checkbox" class="gcheck" data-g="${g.key}" ${on === g.rules.length ? 'checked' : ''} ${g.locked ? 'disabled' : ''}
+      ${on && on < g.rules.length ? 'data-mixed="1"' : ''}><span></span></label>`;
 }
-function ruleRow(g, x, changed, withGroup) {
-  return `<tr class="${rules[x.code].enabled ? '' : 'off'}">
-    <td style="width:62px">${toggle(x, g.locked)}</td>
-    <td style="width:58px"><span class="code">${x.code}</span></td>
-    <td>${esc(x.text)}${changed ? ' <span class="dot" title="Отличается от настройки по умолчанию"></span>' : ''}
-      <div class="muted small">обычно: ${SEV[x.typical] || x.typical} · по умолчанию ${x.default ? 'включено' : 'выключено'}${withGroup ? `<span class="g-inline"> · ${esc(g.title)}</span>` : ''}</div></td>
-    ${withGroup ? `<td class="small col-group" style="width:240px">${esc(g.title)}<div class="muted">${esc(g.standards)}</div></td>` : ''}
-    <td class="col-sev">${sevSelect(x, g.locked)}</td></tr>`;
+// стандарты проверки: [{key, label, clauses}] из индекса «стандарт → проверки»
+function stdsOf(code) {
+  return (S.standards || []).filter(e => e.direct.some(d => d.code === code))
+    .map(e => ({key: e.key, label: e.label, clauses: e.direct.find(d => d.code === code).clauses}));
+}
+const NOTE_CHIP = {new: 'info', accepted: 'warning', rejected: 'error', applied: 'ok'};
+function noteCard(n) {
+  const dev = n.dev ? `<div class="note-dev"><b>Ответ разработчика</b> <span class="muted small">${esc(n.dev.ts)}${n.dev.rev_after ? ' · ревизия правила ' + n.dev.rev_after : ''}</span>
+    <div>${esc(n.dev.comment)}</div></div>` : '';
+  return `<div class="note">
+    <div class="note-head"><span class="chip ${NOTE_CHIP[n.status] || 'info'}">${esc(noteStatuses[n.status] || n.status)}</span>
+      <span class="muted small">${esc(n.ts)} · ${esc(n.user)} · ревизия правила ${n.rev || 1}${n.app ? ' · версия ' + esc(n.app) : ''}</span>
+      ${n.status === 'new' ? `<button class="btn icon" data-note-del="${n.id}" title="Удалить мнение (пока оно не разобрано)">×</button>` : ''}</div>
+    <div class="note-text">${esc(n.text)}</div>${dev}</div>`;
+}
+function reviewBtn(x) {
+  const r = reviews[x.code];
+  if (!r) return `<button class="rev-btn" data-rev="${x.code}" title="Отметить, что правило утверждено: администратор согласен с ним и к нему не возвращается: отметку увидят все администраторы">☐ Утверждено</button>`;
+  const old = (x.rev || 1) > (r.rev || 1);
+  return `<button class="rev-btn on ${old ? 'old' : ''}" data-rev="${x.code}" title="Отметил ${esc(r.user)}, ${esc(r.ts)}${old ? '. После отметки правило изменено (ревизия ' + (x.rev || 1) + ') — стоит просмотреть заново' : ''}. Нажмите, чтобы снять отметку">✓ Утверждено${old ? ' (правило изменено)' : ''}</button>`;
+}
+function expertBlock(x) {
+  const list = expertNotes[x.code] || [];
+  return `<div class="expert">
+    <div><b>Мнение эксперта</b></div>
+    <div class="muted small">Что и как должна проверять эта проверка, как на неё реагировать: важность, формулировка замечания, когда не срабатывать.
+      Разработчик перепроверит мнение по стандарту и ответит здесь; при необходимости правило будет изменено.</div>
+    <textarea class="exp-text" data-note="${x.code}" rows="3" maxlength="4000" placeholder="Например: проверять не только поле допуска, но и ... ; при ... выдавать предупреждение, а не ошибку">${esc(noteDraft[x.code] || '')}</textarea>
+    <div><button class="btn primary" data-note-save="${x.code}">Отправить мнение</button> ${reviewBtn(x)}
+      <span class="muted small">Новое мнение снимает отметку «Утверждено».</span></div>
+    ${list.map(noteCard).join('')}
+  </div>`;
+}
+function docBlock(x) {
+  const d = x.doc;
+  if (!d) return '<div class="rdoc muted small">Описание для этой проверки пока не написано.</div>' + `<div class="rdoc">${expertBlock(x)}</div>`;
+  const row = (t, v) => v ? `<div class="rdoc-row"><b>${t}</b><div>${esc(v)}</div></div>` : '';
+  return `<div class="rdoc">
+    ${row('Что проверяется', (d.what || '').replace(/^Что\s+/, '').replace(/^./, ch => ch.toUpperCase()))}${row('Как определяется', d.how)}${row('Пример замечания', d.example)}
+    ${row('Когда не срабатывает', d.skip)}${row('Настройки', d.params)}
+    <div class="muted small">Код ${x.code} · ревизия правила ${x.rev || 1}${x.default ? '' : ' · по умолчанию выключена'}</div>
+    ${expertBlock(x)}
+  </div>`;
+}
+function ruleRow(g, x, onlyStd) {
+  const chips = stdsOf(x.code).map(e => {
+    const cl = e.clauses.length ? ' ' + e.clauses.join(', ') : '';
+    return onlyStd === e.key ? (cl ? `<span class="clause-chip">${esc(cl.trim())}</span>` : '')
+      : `<a href="#" class="std-chip link" data-std="${esc(e.key)}" title="Показать все проверки по этому стандарту">${esc(e.label + cl)}</a>`;
+  }).join('');
+  return `<div class="rrow ${rules[x.code].enabled ? '' : 'off'} ${reviews[x.code] ? 'reviewed' : ''}" id="rule-${x.code}">
+    ${toggle(x, g.locked)}
+    <span class="code">${x.code}</span>
+    <div class="rtext">${esc(x.text)}${isChanged(x) ? ' <span class="dot" title="Отличается от настройки по умолчанию"></span>' : ''}${!x.default ? '<span class="muted small"> · по умолчанию выключена</span>' : ''}${chips ? `<div class="rstd">${chips}</div>` : ''}<div class="rrev">${reviewBtn(x)}</div></div>
+    <button class="info-btn ${openDocs.has(x.code) ? 'on' : ''}" data-doc="${x.code}" ${(expertNotes[x.code] || []).length ? `data-n="${expertNotes[x.code].length}"` : ''}
+      title="Что проверяется и как${(expertNotes[x.code] || []).length ? ' · есть мнения эксперта: ' + expertNotes[x.code].length : ''}" aria-label="Как работает проверка ${x.code}">i</button>
+    ${sevSelect(x, g.locked)}
+    ${openDocs.has(x.code) ? docBlock(x) : ''}
+  </div>`;
+}
+const stdChips = g => (g.standards || '').split(/,\s*(?=ГОСТ|ОСТ|СТП|ISO)/).filter(Boolean)
+  .map(s => `<span class="std-chip">${esc(s)}</span>`).join('');
+function sevCounts(g) {
+  const c = {error: 0, warning: 0, info: 0};
+  for (const x of g.rules) if (rules[x.code].enabled) c[effSev(x)]++;
+  return Object.entries(c).filter(([, n]) => n).map(([k, n]) => `<span class="chip ${k}">${SEV_SHORT[k]}: ${n}</span>`).join('');
+}
+function clauses(g) {
+  if (!g.clauses || !g.clauses.length) return '';
+  const done = g.clauses.filter(c => c[2]).length;
+  return `<details class="clauses" open><summary>Пункты стандарта — проверяется по чертежу ${done} из ${g.clauses.length}</summary>
+    <table class="grid"><tbody>${g.clauses.map(([p, t, code]) => `<tr class="${code ? '' : 'muted'}">
+      <td class="mono" style="width:120px">п. ${esc(p)}</td><td>${esc(t)}</td>
+      <td style="width:120px">${code ? code.split(',').map(c => c.trim()).map(c => `<a href="#rule-${c}" class="code" data-goto="${c}">${c}</a>`).join(' ') : '<span class="small">не проверяется</span>'}</td>
+    </tr>`).join('')}</tbody></table></details>`;
+}
+function groupBlock(g, list, compact) {
+  const on = groupOn(g);
+  return `<div class="card rgroup ${g.locked ? 'locked' : ''} ${modOff(g) ? 'mod-off' : ''}">
+    <div class="rg-head">
+      <div class="rg-title">
+        <div class="rg-name">${compact ? `<a href="#" data-sel="${g.key}">${esc(g.title)}</a>` : esc(g.title)}</div>
+        <div class="std-chips">${stdChips(g)}</div>
+        ${compact ? '' : `<div class="muted small">${esc(g.description)}</div>`}
+      </div>
+      <div class="rg-side">
+        <span class="muted small">включено ${on} из ${g.rules.length}</span>
+        ${groupSwitch(g)}
+      </div>
+    </div>
+    ${compact ? '' : `<div class="chips rg-sev">${sevCounts(g)}</div>${clauses(g)}`}
+    <div class="rrows">${list.map(({x}) => ruleRow(g, x)).join('') || '<div class="empty small">Нет проверок под фильтр</div>'}</div>
+  </div>`;
+}
+function overview() {
+  return S.sections.map(s => {
+    const gs = S.groups.filter(g => g.section === s.key);
+    return `<h3 class="sub ${s.module ? 'mod' : ''}">${esc(s.title)}${s.module ? ' <span class="chip info">отдельный блок</span>' : ''}</h3>${modBlock(s)}<div class="ov-grid ${s.module && !modules[s.key] ? 'mod-off' : ''}">${gs.map(g => {
+      const on = groupOn(g), n = g.rules.length, ch = g.rules.filter(isChanged).length;
+      return `<button class="ov-card" data-sel="${g.key}">
+        <b>${esc(g.title)}</b><span class="muted small">${esc(g.standards)}</span>
+        <span class="ov-bar"><i style="width:${n ? Math.round(100 * on / n) : 0}%"></i></span>
+        <span class="small">${n ? `${on} из ${n} включено` : 'нет проверок'}${ch ? ` · <span class="accent">изменено ${ch}</span>` : ''}</span>
+      </button>`;
+    }).join('')}</div>`;
+  }).join('');
+}
+function stdMatches(e) {
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  if (!q) return true;
+  if (e.label.toLowerCase().includes(q)) return true;
+  return e.direct.some(d => byCode[d.code] && matches(byCode[d.code].g, byCode[d.code].x));
+}
+function renderNavStd() {
+  const list = S.standards.filter(stdMatches);
+  document.getElementById('rnav').innerHTML =
+    `<a href="#" class="rn-item ${!selStd ? 'active' : ''}" data-std=""><span>Все стандарты</span><span class="rn-cnt">${S.standards.length}</span></a>` +
+    list.map(e => `<a href="#" class="rn-item ${selStd === e.key && !searching() ? 'active' : ''}" data-std="${esc(e.key)}">
+      <span>${esc(e.label)}</span><span class="rn-cnt">${e.direct.length}</span></a>`).join('') +
+    (list.length ? '' : '<div class="empty small">Стандарт не найден</div>');
+  const ns = document.getElementById('rnav-select');
+  ns.innerHTML = '<option value="">Все стандарты</option>' + S.standards.map(e => `<option value="${esc(e.key)}">${esc(e.label)} (${e.direct.length})</option>`).join('');
+  ns.value = selStd || '';
+}
+function stdOverview() {
+  const list = S.standards.filter(stdMatches);
+  if (!list.length) return '<div class="empty">Ничего не найдено</div>';
+  const title = k => (S.groups.find(g => g.key === k) || {}).title || k;
+  return `<div class="card flush"><table class="grid"><thead><tr><th>Стандарт</th><th>Где применяется</th><th style="text-align:right">Проверок</th></tr></thead><tbody>
+    ${list.map(e => `<tr class="clickable" data-std="${esc(e.key)}"><td><a href="#" class="std-chip link" data-std="${esc(e.key)}">${esc(e.label)}</a></td>
+      <td class="small muted">${e.groups.map(k => esc(title(k))).join(' · ')}</td>
+      <td style="text-align:right">${e.direct.length}${e.related.length ? `<span class="muted small"> + ${e.related.length} в группе</span>` : ''}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+function stdCard(e) {
+  const title = k => (S.groups.find(g => g.key === k) || {}).title || k;
+  const rowFor = c => byCode[c] ? ruleRow(byCode[c].g, byCode[c].x, e.key) : '';
+  const direct = e.direct.filter(d => byCode[d.code] && matches(byCode[d.code].g, byCode[d.code].x));
+  const rel = e.related.filter(c => byCode[c] && matches(byCode[c].g, byCode[c].x));
+  const onN = e.direct.filter(d => rules[d.code] && rules[d.code].enabled).length;
+  return `<div class="card rgroup">
+    <div class="rg-head"><div class="rg-title">
+      <div class="rg-name">${esc(e.label)}</div>
+      <div class="std-chips">${e.groups.map(k => `<a href="#" class="std-chip link" data-sel="${k}">${esc(title(k))}</a>`).join('')}</div>
+      <div class="muted small">Проверок, которые ссылаются на стандарт: ${e.direct.length} (включено ${onN})${e.related.length ? `; ещё ${e.related.length} из тех же групп` : ''}</div>
+    </div></div>
+    <div class="rrows">${direct.map(d => rowFor(d.code)).join('') || '<div class="empty small">Нет проверок под фильтр</div>'}</div>
+    ${rel.length ? `<details class="clauses"><summary>Другие проверки тех же групп (${rel.length}) — стандарт в замечании не называется</summary>
+      <div class="rrows">${rel.map(rowFor).join('')}</div></details>` : ''}
+  </div>`;
+}
+function renderNav() {
+  if (navMode === 'std') return renderNavStd();
+  const filt = searching() || !!fstate;
+  const cnt = g => g.rules.filter(x => matches(g, x)).length;
+  const all = S.groups.reduce((a, g) => a + g.rules.length, 0);
+  let html = `<a href="#" class="rn-item ${sel === 'overview' && !searching() ? 'active' : ''}" data-sel="overview"><span>Обзор</span><span class="rn-cnt">${all}</span></a>`;
+  let opts = '<option value="overview">Обзор — все группы</option>';
+  for (const s of S.sections) {
+    html += `<div class="rn-sec ${s.module ? 'mod' : ''}">${esc(s.title)}${s.module ? `<span class="rn-mod ${modules[s.key] ? 'on' : ''}">${modules[s.key] ? 'включён' : 'выключен'}</span>` : ''}</div>`;
+    opts += `<optgroup label="${esc(s.title)}${s.module ? (modules[s.key] ? ' — включён' : ' — выключен') : ''}">`;
+    for (const g of S.groups.filter(g => g.section === s.key)) {
+      const on = groupOn(g), n = g.rules.length, m = filt ? cnt(g) : null;
+      html += `<a href="#" class="rn-item ${sel === g.key && !searching() ? 'active' : ''} ${filt && !m ? 'dim' : ''}" data-sel="${g.key}" title="${esc(g.standards)}">
+        <span>${esc(g.title)}</span><span class="rn-cnt ${!n ? '' : on === 0 ? 'none' : on < n ? 'part' : 'full'}">${filt ? m : on + '/' + n}</span></a>`;
+      opts += `<option value="${g.key}">${esc(g.title)} (${on}/${n})</option>`;
+    }
+    opts += '</optgroup>';
+  }
+  document.getElementById('rnav').innerHTML = html;
+  const ns = document.getElementById('rnav-select');
+  ns.innerHTML = opts; ns.value = sel;
+}
+function setMode(m) {
+  navMode = m;
+  try { localStorage.setItem('admin-nav', m); } catch (e) {}
+  document.getElementById('q').value = '';
+  renderRules();
+}
+function selectStd(key) {
+  selStd = key || null;
+  try { localStorage.setItem('admin-std', selStd || ''); } catch (e) {}
+  navMode = 'std';
+  try { localStorage.setItem('admin-nav', 'std'); } catch (e) {}
+  document.getElementById('q').value = '';
+  renderRules();
+  window.scrollTo({top: 0});
+}
+function select(key) {
+  sel = key;
+  try { localStorage.setItem('admin-group', key); } catch (e) {}
+  document.getElementById('q').value = '';
+  renderRules();
+  window.scrollTo({top: 0});
 }
 function renderRules() {
-  document.querySelectorAll('#view-switch button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
-  document.getElementById('expand').hidden = view !== 'groups';
+  if (sel !== 'overview' && !S.groups.some(g => g.key === sel)) sel = 'overview';
+  if (selStd && !S.standards.some(e => e.key === selStd)) selStd = null;
+  document.querySelectorAll('#f-state button').forEach(b => b.classList.toggle('active', b.dataset.state === fstate));
+  document.querySelectorAll('#nav-mode button').forEach(b => b.classList.toggle('active', b.dataset.mode === navMode));
+  renderNav();
   const box = document.getElementById('groups');
-  const rows = visible();
-  if (!rows.length) { box.innerHTML = '<div class="empty">Ничего не найдено</div>'; return; }
-  if (view === 'list') {
-    box.innerHTML = `<div class="card flush"><table class="grid rules list">
-      <thead><tr><th>Вкл.</th><th>Код</th><th>Проверка</th><th class="col-group">Группа / стандарт</th><th class="col-sev">Важность</th></tr></thead>
-      <tbody>${rows.map(({g, x, changed}) => ruleRow(g, x, changed, true)).join('')}</tbody></table></div>`;
+  if (navMode === 'std') {
+    const e = S.standards.find(x => x.key === selStd);
+    box.innerHTML = e && !searching() ? stdCard(e) : stdOverview();
+  } else if (sel === 'overview' && !searching() && !fstate) {
+    box.innerHTML = overview();
   } else {
-    const filtered = document.getElementById('q').value.trim() || document.getElementById('f-state').value
-      || document.getElementById('f-group').value;
-    box.innerHTML = S.groups.map(g => {
-      const list = rows.filter(r => r.g === g);
-      if (!list.length) return '';
-      const on = g.rules.filter(x => rules[x.code].enabled).length;
-      const state = on === 0 ? '' : on === g.rules.length ? 'checked' : 'mixed';
-      const isOpen = open.has(g.key) || filtered;
-      return `<div class="group ${g.locked ? 'locked' : ''}">
-        <div class="group-head">
-          <input type="checkbox" class="gcheck" data-g="${g.key}" ${state === 'checked' ? 'checked' : ''} ${g.locked ? 'disabled' : ''}
-            ${state === 'mixed' ? 'data-mixed="1"' : ''} title="Включить/выключить все проверки группы">
-          <div class="group-title" data-toggle="${g.key}">
-            <div><b>${esc(g.title)}</b> <span class="std">${esc(g.standards)}</span></div>
-            <div class="muted small">${esc(g.description)}</div>
-          </div>
-          <span class="chip ${on === g.rules.length ? 'ok' : on ? 'warning' : ''}">${on} / ${g.rules.length}</span>
-          <button class="chev" data-toggle="${g.key}" aria-label="Развернуть">${isOpen ? '▾' : '▸'}</button>
-        </div>
-        ${isOpen ? `<table class="grid rules">${list.map(({x, changed}) => ruleRow(g, x, changed, false)).join('')}</table>` : ''}
-      </div>`;
-    }).join('');
-    box.querySelectorAll('.gcheck').forEach(cb => {
-      if (cb.dataset.mixed) cb.indeterminate = true;
-      cb.onchange = () => {
-        const g = S.groups.find(x => x.key === cb.dataset.g);
-        for (const x of g.rules) rules[x.code].enabled = cb.checked;
-        renderRules(); setDirty();
-      };
-    });
-    box.querySelectorAll('[data-toggle]').forEach(el => el.onclick = () => {
-      const k = el.dataset.toggle; open.has(k) ? open.delete(k) : open.add(k); renderRules();
-    });
+    const rows = visible();
+    const single = !searching() && sel !== 'overview';
+    const gs = S.groups.filter(g => rows.some(r => r.g === g) || (single && g.key === sel));
+    const head = single ? (g => { const s = g && secOf(g.section); return s && s.module ? modBlock(s) : ''; })(S.groups.find(x => x.key === sel)) : '';
+    box.innerHTML = gs.length ? head + gs.map(g => groupBlock(g, rows.filter(r => r.g === g), !single)).join('')
+      : '<div class="empty">Ничего не найдено</div>';
   }
+  box.querySelectorAll('.gcheck').forEach(cb => {
+    if (cb.dataset.mixed) cb.indeterminate = true;
+    cb.onchange = () => {
+      const g = S.groups.find(x => x.key === cb.dataset.g);
+      for (const x of g.rules) rules[x.code].enabled = cb.checked;
+      renderRules(); setDirty();
+    };
+  });
+  box.querySelectorAll('.mcheck').forEach(cb => cb.onchange = () => {
+    modules[cb.dataset.m] = cb.checked; renderRules(); setDirty();
+  });
   box.querySelectorAll('.rcheck').forEach(cb => cb.onchange = () => {
     rules[cb.dataset.c].enabled = cb.checked; renderRules(); setDirty();
   });
-  box.querySelectorAll('.rsev').forEach(sel => sel.onchange = () => {
-    rules[sel.dataset.c].severity = sel.value; renderRules(); setDirty();
+  box.querySelectorAll('.rsev').forEach(s => s.onchange = () => {
+    rules[s.dataset.c].severity = s.value; renderRules(); setDirty();
+  });
+  box.querySelectorAll('[data-goto]').forEach(a => a.onclick = ev => {
+    ev.preventDefault();
+    const el = document.getElementById('rule-' + a.dataset.goto);
+    if (el) { el.scrollIntoView({behavior: 'smooth', block: 'center'}); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1400); }
   });
 }
-function bulk(on) {
-  for (const {g, x} of visible()) if (!g.locked) rules[x.code].enabled = on;
-  renderRules(); setDirty();
-}
-document.getElementById('q').oninput = renderRules;
-document.getElementById('f-state').onchange = renderRules;
-document.getElementById('f-group').onchange = renderRules;
-document.getElementById('bulk-on').onclick = () => bulk(true);
-document.getElementById('bulk-off').onclick = () => bulk(false);
-document.querySelectorAll('#view-switch button').forEach(b => b.onclick = () => {
-  view = b.dataset.view;
-  try { localStorage.setItem('admin-view', view); } catch (e) {}
-  renderRules();
+document.getElementById('tab-rules').addEventListener('input', ev => {
+  const t = ev.target.closest('[data-note]');
+  if (t) noteDraft[t.dataset.note] = t.value;
 });
-document.getElementById('expand').onclick = () => {
-  const all = open.size === S.groups.length;
-  open = all ? new Set() : new Set(S.groups.map(g => g.key));
-  document.getElementById('expand').textContent = all ? 'Развернуть всё' : 'Свернуть всё';
+async function loadExpert() {
+  try {
+    const j = await (await fetch('/api/admin/expert-notes')).json();
+    expertNotes = j.notes || {}; noteStatuses = j.statuses || {}; reviews = j.reviews || {};
+  } catch (e) {}
+  renderRules();
+}
+document.getElementById('tab-rules').addEventListener('click', async ev => {
+  const sv = ev.target.closest('[data-note-save]');
+  if (sv) {
+    const code = sv.dataset.noteSave, text = (noteDraft[code] || '').trim();
+    if (!text) { alert('Напишите, что и как должно проверяться'); return; }
+    sv.disabled = true;
+    const r = await fetch('/api/admin/expert-notes', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({code, text})});
+    const j = await r.json();
+    if (!r.ok) { sv.disabled = false; alert(j.error || 'Не удалось сохранить мнение'); return; }
+    (expertNotes[code] = expertNotes[code] || []).unshift(j);
+    delete reviews[code];
+    noteDraft[code] = '';
+    const y = window.scrollY; renderRules(); window.scrollTo({top: y});
+    return;
+  }
+  const rv = ev.target.closest('[data-rev]');
+  if (rv) {
+    const code = rv.dataset.rev, on = !reviews[code];
+    rv.disabled = true;
+    const r = await fetch('/api/admin/rule-review', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({code, reviewed: on})});
+    const j = await r.json();
+    if (!r.ok) { rv.disabled = false; alert(j.error || 'Не удалось сохранить отметку'); return; }
+    if (j.review) reviews[code] = j.review; else delete reviews[code];
+    const y = window.scrollY; renderRules(); window.scrollTo({top: y});
+    return;
+  }
+  const dl = ev.target.closest('[data-note-del]');
+  if (dl) {
+    if (!confirm('Удалить это мнение?')) return;
+    const r = await fetch('/api/admin/expert-notes/' + dl.dataset.noteDel, {method: 'DELETE'});
+    if (!r.ok) { alert((await r.json()).error || 'Не удалось удалить'); return; }
+    await loadExpert();
+    return;
+  }
+  const db = ev.target.closest('[data-doc]');
+  if (db) {
+    const c = db.dataset.doc;
+    openDocs.has(c) ? openDocs.delete(c) : openDocs.add(c);
+    const y = window.scrollY;
+    renderRules();
+    window.scrollTo({top: y});
+    return;
+  }
+  const st = ev.target.closest('[data-std]');
+  if (st) { ev.preventDefault(); return selectStd(st.dataset.std); }
+  const a = ev.target.closest('[data-sel]');
+  if (a) {
+    ev.preventDefault();
+    navMode = 'groups';
+    try { localStorage.setItem('admin-nav', 'groups'); } catch (e) {}
+    select(a.dataset.sel);
+  }
+});
+document.querySelectorAll('#nav-mode button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+document.getElementById('rnav-select').onchange = ev => navMode === 'std' ? selectStd(ev.target.value) : select(ev.target.value);
+document.getElementById('q').oninput = renderRules;
+document.getElementById('docs-toggle').onclick = () => {
+  const codes = [...document.querySelectorAll('#groups .rrow')].map(r => r.id.replace('rule-', ''));
+  const all = codes.length && codes.every(c => openDocs.has(c));
+  for (const c of codes) all ? openDocs.delete(c) : openDocs.add(c);
   renderRules();
 };
+document.querySelectorAll('#f-state button').forEach(b => b.onclick = () => { fstate = b.dataset.state; renderRules(); });
 document.getElementById('reset-rules').onclick = () => {
+  if (!confirm('Вернуть все проверки к настройкам по умолчанию? Изменения применятся после «Сохранить».')) return;
   for (const g of S.groups) for (const x of g.rules) rules[x.code] = {enabled: x.default, severity: ''};
+  for (const s of S.sections) if (s.module) modules[s.key] = s.module.default;
   renderRules(); setDirty();
 };
 
@@ -401,7 +698,7 @@ function renderCustom() {
     <tbody>${list.map(r => {
       const off = rules[r.code] && !rules[r.code].enabled;
       const scope = [S.custom_meta.applies[r.applies || 'all'], r.material_contains ? 'материал: ' + r.material_contains : '',
-                     r.designation_prefix ? 'обозначение: ' + r.designation_prefix + '…' : ''].filter(Boolean).join(' · ');
+                     r.designation_prefix ? 'обозначение: ' + r.designation_prefix + '…' : '', r.when_tt ? 'если в тексте: ' + r.when_tt : ''].filter(Boolean).join(' · ');
       return `<tr class="${off ? 'off' : ''}">
       <td style="width:58px"><span class="code">${esc(r.code)}</span></td>
       <td><b>${esc(r.title)}</b><div class="muted small">${esc(crSummary(r))}</div>
@@ -448,6 +745,7 @@ function openEditor(r) {
   document.getElementById('cr-applies').innerHTML = opts(M.applies, r.applies || 'all');
   document.getElementById('cr-material').value = r.material_contains || '';
   document.getElementById('cr-prefix').value = r.designation_prefix || '';
+  document.getElementById('cr-when').value = r.when_tt || '';
   document.getElementById('cr-severity').value = r.severity || 'warning';
   document.getElementById('cr-message').value = r.message || '';
   document.getElementById('cr-ref').value = r.ref || '';
@@ -460,7 +758,7 @@ function openEditor(r) {
 function crCollect() {
   const v = id => (document.getElementById(id) || {}).value;
   const r = {title: v('cr-title'), kind: v('cr-kind'), applies: v('cr-applies'), material_contains: v('cr-material'),
-             designation_prefix: v('cr-prefix'), severity: v('cr-severity'), message: v('cr-message'), ref: v('cr-ref'),
+             designation_prefix: v('cr-prefix'), when_tt: v('cr-when'), severity: v('cr-severity'), message: v('cr-message'), ref: v('cr-ref'),
              pattern: v('cr-pattern'), match: v('cr-match'), where: v('cr-where'), field: v('cr-field'), check: v('cr-check'),
              value: v('cr-value'), what: v('cr-what')};
   if (document.getElementById('cr-values')) r.values = v('cr-values').split('\n').map(s => s.trim()).filter(Boolean);
@@ -468,7 +766,7 @@ function crCollect() {
   return r;
 }
 async function reloadKeepTab() {
-  if (dirty && !confirm('На вкладке «Проверки по ГОСТ» есть несохранённые изменения — они будут сброшены. Продолжить?')) return;
+  if (dirty && !confirm('На вкладке «Проверки по стандартам» есть несохранённые изменения — они будут сброшены. Продолжить?')) return;
   await load();
 }
 document.getElementById('cr-add').onclick = () => openEditor(null);
@@ -555,44 +853,145 @@ async function loadExceptions() {
   });
 }
 
-// ----------------------------------------------------------------- доступ
-function renderAccess() {
-  const set = S.auth.password_set;
-  document.getElementById('pwd-state').textContent = set ? 'Пароль задан. Чтобы снять защиту, сохраните пустой новый пароль.'
-    : 'Пароль не задан — настройки открыты всем пользователям программы.';
-  document.getElementById('old-wrap').hidden = !set;
+// ----------------------------------------------------------------- пользователи, отметки, журнал
+const ROLE = {admin: 'администратор', user: 'пользователь'};
+const det = d => typeof d === 'object' && d ? Object.entries(d).map(([k, v]) => k + ': ' + (Array.isArray(v) ? v.join(', ') : v)).join('; ') : (d || '');
+async function renderUsers() {
+  const list = await (await fetch('/api/admin/users')).json();
+  document.getElementById('u-list').innerHTML = `<table class="grid"><tr><th>Имя</th><th>Роль</th><th>Создан</th><th></th></tr>
+    ${list.map(u => `<tr><td><b>${esc(u.name)}</b>${u.default_password ? ' <span class="chip warning">пароль по умолчанию</span>' : ''}</td>
+      <td>${ROLE[u.role]}</td><td class="muted">${esc(u.created)}</td>
+      <td style="white-space:nowrap"><button class="btn" data-pw="${esc(u.name)}">Сбросить пароль</button>
+        <button class="btn" data-role="${esc(u.name)}" data-to="${u.role === 'admin' ? 'user' : 'admin'}">${u.role === 'admin' ? 'Сделать пользователем' : 'Сделать администратором'}</button>
+        <button class="btn icon" data-del="${esc(u.name)}" title="Удалить">×</button></td></tr>`).join('')}</table>`;
+  const box = document.getElementById('u-list');
+  const call = async (url, method, body) => {
+    const r = await fetch(url, {method, headers: {'Content-Type': 'application/json'}, body: body && JSON.stringify(body)});
+    const j = await r.json();
+    if (!r.ok) alert(j.error || 'Ошибка'); else renderUsers();
+  };
+  box.querySelectorAll('[data-pw]').forEach(b => b.onclick = () => {
+    const p = prompt(`Новый пароль для «${b.dataset.pw}» (не короче 4 символов):`);
+    if (p) call('/api/admin/users/' + encodeURIComponent(b.dataset.pw), 'PATCH', {password: p});
+  });
+  box.querySelectorAll('[data-role]').forEach(b => b.onclick = () =>
+    call('/api/admin/users/' + encodeURIComponent(b.dataset.role), 'PATCH', {role: b.dataset.to}));
+  box.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
+    if (confirm(`Удалить пользователя «${b.dataset.del}»? Его отчёты останутся.`))
+      call('/api/admin/users/' + encodeURIComponent(b.dataset.del), 'DELETE');
+  });
+  const sel = document.getElementById('log-user'), cur = sel.value;
+  sel.innerHTML = '<option value="">все пользователи</option>' + list.map(u => `<option ${u.name === cur ? 'selected' : ''}>${esc(u.name)}</option>`).join('');
 }
-document.getElementById('pwd-form').onsubmit = async ev => {
+document.getElementById('u-form').onsubmit = async ev => {
   ev.preventDefault();
-  const r = await fetch('/api/admin/password', {method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({old: document.getElementById('pwd-old').value, new: document.getElementById('pwd-new').value})});
+  const r = await fetch('/api/admin/users', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name: document.getElementById('u-name').value, password: document.getElementById('u-pwd').value,
+                          role: document.getElementById('u-role').value})});
   const j = await r.json();
-  document.getElementById('pwd-msg').innerHTML = r.ok ? `<div class="banner" style="margin-top:12px">${j.password_set ? 'Пароль сохранён' : 'Пароль снят'}</div>`
-    : `<div class="error-box">${esc(j.error || 'Ошибка')}</div>`;
-  document.getElementById('pwd-old').value = document.getElementById('pwd-new').value = '';
-  if (r.ok) await load();
+  document.getElementById('u-msg').innerHTML = r.ok ? '<div class="banner" style="margin-top:12px">Пользователь создан</div>'
+    : `<div class="error-box" style="margin-top:12px">${esc(j.error)}</div>`;
+  if (r.ok) { document.getElementById('u-name').value = document.getElementById('u-pwd').value = ''; renderUsers(); }
 };
+const VERD = {ok: 'верно', false: 'ложное', inexact: 'неточно'};
+async function loadReview() {
+  const j = await (await fetch('/api/admin/feedback')).json();
+  const body = document.getElementById('rv-body');
+  if (!j.rules.length && !j.missed.length && !j.parse.length && !(j.comments || []).length) { body.innerHTML = 'Отметок пока нет'; return; }
+  body.innerHTML = `
+    <h3 class="sub">Правила: что подтверждено и что названо ложным</h3>
+    <p class="muted small">Считаются отметки по текущей ревизии правила. Если поведение правила меняли, отметки по прежним ревизиям
+      показаны отдельно («до изменения») и не входят в долю ложных. Отметки старых версий программы относятся к ревизии 1.</p>
+    ${j.rules.length ? `<table class="grid"><tr><th>Код</th><th>Правило</th><th>Верно</th><th>Ложное</th><th>Неточно</th><th>Доля ложных</th><th>До изменения</th></tr>
+      ${j.rules.map(r => `<tr><td class="mono">${esc(r.code)}${r.known ? '' : ' <span class="chip warning" title="Такого правила нет в этой версии программы">нет в версии</span>'}</td>
+        <td>${esc(r.title || '')}<div class="muted small">${esc((r.example || '').slice(0, 120))}</div></td>
+        <td>${r.ok}</td><td><b>${r.false}</b></td><td>${r.inexact}</td>
+        <td>${r.total ? Math.round(r.false_share * 100) + ' %' : '—'}</td>
+        <td class="muted small">${r.old.total ? `ревизия <${r.rev}: верно ${r.old.ok}, ложное ${r.old.false}, неточно ${r.old.inexact}` : ''}</td></tr>`).join('')}</table>` : '<div class="muted">нет</div>'}
+    <h3 class="sub">Комментарии администраторов к замечаниям (${(j.comments || []).length})</h3>
+    ${(j.comments || []).length ? `<table class="grid"><tr><th>Когда</th><th>Кто</th><th>Чертёж</th><th>Замечание</th><th>Комментарий</th><th>Как должно быть</th></tr>
+      ${j.comments.map(e => `<tr><td class="mono">${esc(e.ts)}</td><td>${esc(e.user)}</td><td class="mono">${esc(e.designation || e.file || '')}</td>
+        <td><span class="mono">${esc(e.code || '')}</span> ${esc((e.message || '').slice(0, 140))}</td><td>${esc(e.comment || '')}</td>
+        <td>${esc(e.expected || '')}</td></tr>`).join('')}</table>` : '<div class="muted">нет</div>'}
+    <h3 class="sub">Пропущено программой (${j.missed.length})</h3>
+    ${j.missed_groups.length ? `<p>${j.missed_groups.map(([g, n]) => `<span class="chip info">${esc(g)}: ${n}</span>`).join(' ')}</p>` : ''}
+    ${j.missed.length ? `<table class="grid"><tr><th>Когда</th><th>Кто</th><th>Чертёж</th><th>Группа</th><th>Что должно быть найдено</th></tr>
+      ${j.missed.map(e => `<tr><td class="mono">${esc(e.ts)}</td><td>${esc(e.user)}</td><td class="mono">${esc(e.designation || e.file || '')}</td>
+        <td>${esc(e.group || '')}</td><td>${esc(e.comment)}</td></tr>`).join('')}</table>` : '<div class="muted">нет</div>'}
+    <h3 class="sub">Ошибки разбора (${j.parse.length})</h3>
+    ${j.parse.length ? `<table class="grid"><tr><th>Когда</th><th>Кто</th><th>Чертёж</th><th>Прочитано</th><th>Как должно быть / комментарий</th></tr>
+      ${j.parse.map(e => `<tr><td class="mono">${esc(e.ts)}</td><td>${esc(e.user)}</td><td class="mono">${esc(e.designation || e.file || '')}</td>
+        <td class="mono">${esc(e.dim || '')}</td><td>${esc(e.expected ? e.expected + ' — ' : '')}${esc(e.comment)}</td></tr>`).join('')}</table>` : '<div class="muted">нет</div>'}
+    <p class="muted">Отметок по пользователям: ${j.users.map(([u, n]) => `${esc(u)} — ${n}`).join('; ')}</p>`;
+}
+document.getElementById('rv-reload').onclick = loadReview;
+async function loadLog() {
+  const u = document.getElementById('log-user').value;
+  const a = await (await fetch('/api/admin/actions' + (u ? '?user=' + encodeURIComponent(u) : ''))).json();
+  document.getElementById('log-body').innerHTML = a.length ? `<table class="grid"><tr><th>Когда</th><th>Кто</th><th>Действие</th><th>Подробности</th></tr>
+    ${a.map(x => `<tr><td class="mono">${esc(x.ts)}</td><td>${esc(x.user)}</td><td>${esc(x.action)}</td><td class="muted">${esc(det(x.detail))}</td></tr>`).join('')}</table>` : 'Записей нет';
+}
+document.getElementById('log-reload').onclick = loadLog;
+document.getElementById('log-user').onchange = loadLog;
 
-// ----------------------------------------------------------------- вход / сохранение / вкладки
-document.getElementById('login-form').onsubmit = async ev => {
-  ev.preventDefault();
-  const r = await fetch('/api/admin/login', {method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({password: document.getElementById('pwd').value})});
-  if (r.ok) { document.getElementById('login-err').hidden = true; load(); }
-  else { const e = document.getElementById('login-err'); e.hidden = false; e.textContent = (await r.json()).error || 'Ошибка входа'; }
+// ----------------------------------------------------------------- нормативы
+async function loadNorms() {
+  const r = await fetch('/api/admin/norms');
+  if (!r.ok) { document.getElementById('nm-body').textContent = 'Не удалось загрузить список'; return; }
+  const a = await r.json();
+  document.getElementById('nm-body').innerHTML = a.length ? `<table class="grid"><tr><th>Обозначение</th><th>Название</th><th>Стр.</th><th>Размер</th><th>Источник</th><th></th></tr>
+    ${a.map(x => `<tr><td><b>${esc(x.designation)}</b></td><td>${esc(x.title)}${x.has_text ? '' : ' <span class="muted">(скан без текста: поиск не работает)</span>'}</td>
+      <td>${x.pages}</td><td class="mono">${(x.size / 1048576).toFixed(1)} МБ</td><td>${x.source === 'user' ? 'добавлен' : 'программа'}</td>
+      <td><a href="/norms/${encodeURIComponent(x.id)}" target="_blank">Открыть</a>${x.source === 'user' ? ` · <a href="#" data-nmedit="${esc(x.id)}">изменить</a> · <a href="#" data-nmdel="${esc(x.id)}">удалить</a>` : ''}</td></tr>`).join('')}</table>` : 'Нормативов нет';
+  document.querySelectorAll('[data-nmdel]').forEach(el => el.onclick = async ev => {
+    ev.preventDefault();
+    if (!confirm('Удалить файл «' + el.dataset.nmdel + '»?')) return;
+    const r = await fetch('/api/admin/norms/' + encodeURIComponent(el.dataset.nmdel), {method: 'DELETE'});
+    if (!r.ok) alert((await r.json()).error || 'Не удалось удалить'); loadNorms();
+  });
+  document.querySelectorAll('[data-nmedit]').forEach(el => el.onclick = async ev => {
+    ev.preventDefault();
+    const it = a.find(x => x.id === el.dataset.nmedit);
+    const des = prompt('Обозначение', it.designation); if (des === null) return;
+    const title = prompt('Название', it.title); if (title === null) return;
+    const r = await fetch('/api/admin/norms/' + encodeURIComponent(it.id), {method: 'PATCH', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({designation: des, title})});
+    if (!r.ok) alert((await r.json()).error || 'Не удалось сохранить'); loadNorms();
+  });
+}
+document.getElementById('nm-add').onclick = async () => {
+  const f = document.getElementById('nm-file').files[0];
+  if (!f) { alert('Выберите файл PDF'); return; }
+  const fd = new FormData();
+  fd.append('file', f); fd.append('designation', document.getElementById('nm-des').value); fd.append('title', document.getElementById('nm-title').value);
+  const r = await fetch('/api/admin/norms', {method: 'POST', body: fd});
+  if (!r.ok) { alert((await r.json()).error || 'Не удалось добавить'); return; }
+  document.getElementById('nm-file').value = ''; document.getElementById('nm-des').value = ''; document.getElementById('nm-title').value = '';
+  loadNorms();
 };
-document.getElementById('logout').onclick = async () => { await fetch('/api/admin/logout', {method: 'POST'}); location.reload(); };
+async function findNorms() {
+  const q = document.getElementById('nm-q').value.trim(), box = document.getElementById('nm-found');
+  if (q.length < 3) { box.innerHTML = '<span class="muted">Введите не меньше трёх знаков</span>'; return; }
+  const a = await (await fetch('/api/admin/norms/search?q=' + encodeURIComponent(q))).json();
+  box.innerHTML = a.length ? `<table class="grid"><tr><th>Стандарт</th><th>Стр.</th><th>Фрагмент</th></tr>${a.map(x => `<tr>
+    <td><a href="/norms/${encodeURIComponent(x.id)}#page=${x.page}" target="_blank">${esc(x.designation)}</a></td><td>${x.page}</td><td class="small">${esc(x.snippet)}</td></tr>`).join('')}</table>`
+    : '<span class="muted">Ничего не найдено</span>';
+}
+document.getElementById('nm-find').onclick = findNorms;
+document.getElementById('nm-q').onkeydown = ev => { if (ev.key === 'Enter') findNorms(); };
+
+// ----------------------------------------------------------------- сохранение / вкладки
 document.getElementById('cancel').onclick = () => {
-  ({rules, params, lists} = clone(orig)); renderRules(); renderParams(); renderLists(); setDirty();
+  ({rules, params, lists, modules} = clone(orig)); renderRules(); renderParams(); renderLists(); setDirty();
 };
 document.getElementById('save').onclick = async () => {
   const btn = document.getElementById('save'); btn.disabled = true;
   const r = await fetch('/api/admin/settings', {method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({rules, params, lists})});
+    body: JSON.stringify({rules, params, lists, modules})});
   btn.disabled = false;
-  if (r.status === 401) { alert('Сессия администратора истекла — войдите снова'); return load(); }
+  if (r.status === 401 || r.status === 403) { alert('Нет доступа или сессия истекла — войдите снова'); return load(); }
   if (!r.ok) { alert('Не удалось сохранить настройки'); return; }
-  orig = clone({rules, params, lists});
+  orig = clone({rules, params, lists, modules});
   setDirty();
   const t = document.getElementById('dirty-text');
   document.getElementById('savebar').hidden = false; t.textContent = 'Сохранено — настройки применяются ко всем отчётам';
@@ -600,12 +999,16 @@ document.getElementById('save').onclick = async () => {
 };
 document.querySelectorAll('.admin-tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.admin-tabs button').forEach(x => x.classList.toggle('active', x === b));
-  for (const t of ['rules', 'custom', 'params', 'lists', 'ex', 'access']) document.getElementById('tab-' + t).hidden = t !== b.dataset.tab;
+  for (const t of ['rules', 'custom', 'params', 'lists', 'ex', 'users', 'norms', 'review', 'log']) document.getElementById('tab-' + t).hidden = t !== b.dataset.tab;
+  if (b.dataset.tab === 'norms') loadNorms();
+  if (b.dataset.tab === 'review') loadReview();
+  if (b.dataset.tab === 'log') loadLog();
   try { localStorage.setItem('admin-tab', b.dataset.tab); } catch (e) {}
 });
 window.addEventListener('beforeunload', ev => { if (dirty) { ev.preventDefault(); ev.returnValue = ''; } });
 try { const t = localStorage.getItem('admin-tab'); if (t) document.querySelector(`.admin-tabs [data-tab="${t}"]`)?.click(); } catch (e) {}
 load();
 </script>
+<script src="/static/user.js"></script>
 </body>
 </html>

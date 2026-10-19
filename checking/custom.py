@@ -29,7 +29,7 @@ FIELD_CHECKS = {"filled": "заполнена", "equals": "равна", "contain
                 "regex": "соответствует шаблону (регулярное выражение)"}
 LIST_WHAT = {"grade": "марки материалов", "material": "материал (фрагмент записи в графе 3)",
              "field": "поля допусков (H7, h6…)", "thread": "метрические резьбы (M8, M10x1,25…)",
-             "std": "стандарты (ГОСТ 19903, ОСТ…)", "ra": "значения шероховатости Ra"}
+             "thread_tol": "допуск метрической резьбы (6g, 6H…)", "std": "стандарты (ГОСТ 19903, ОСТ…)", "ra": "значения шероховатости Ra"}
 LIMIT_WHAT = {"it_min": "квалитет не точнее IT…", "ra_min": "шероховатость не точнее Ra…",
               "thickness_max": "толщина листа не больше, мм", "mass_max": "масса не больше, кг"}
 APPLIES = {"all": "все документы", "drawings": "все чертежи", "parts": "детали", "assemblies": "сборочные чертежи",
@@ -48,7 +48,7 @@ def _norm_value(what: str, s: str) -> str:
         return norm_grade(s)
     if what == "thread":
         return _norm_thread(s)
-    if what == "field":
+    if what in ("field", "thread_tol"):
         return s.replace(" ", "")
     if what == "std":
         return re.sub(r"\s+", "", s.upper())
@@ -67,6 +67,11 @@ def validate(rule: dict) -> list[str]:
         errs.append("Укажите название правила")
     if rule.get("severity") not in (ERROR, WARNING, INFO):
         errs.append("Не выбрана важность")
+    if (rule.get("when_tt") or "").strip():
+        try:
+            re.compile(rule["when_tt"])
+        except re.error as e:
+            errs.append(f"Ошибка в условии «если в тексте есть»: {e}")
     if kind in ("text_required", "text_forbidden"):
         if not (rule.get("pattern") or "").strip():
             errs.append("Укажите, какой текст искать")
@@ -115,6 +120,9 @@ def _applies(d: dict, rule: dict) -> bool:
     if a == "sheet" and not facts.get("sheet_thickness"):
         return False
     t = d.get("title") or {}
+    wt = (rule.get("when_tt") or "").strip()
+    if wt and not re.search(wt, _text(d, "all"), re.I):
+        return False
     mc = (rule.get("material_contains") or "").strip().lower()
     if mc and mc not in (t.get("material") or "").lower():
         return False
@@ -163,6 +171,10 @@ def _values(d: dict, what: str) -> list[tuple[str, int | None, list | None]]:
             if x.get("kind") == "thread" and x.get("nominal"):
                 m = re.match(r"[MМ]\s*\d+(?:[.,]\d+)?(?:\s*[×xх]\s*\d+(?:[.,]\d+)?)?", x.get("raw") or "")
                 out.append((m.group(0) if m else f"M{fmtn(x['nominal'])}", x.get("page"), x.get("bbox")))
+    elif what == "thread_tol":
+        for x in d.get("dims") or []:
+            if x.get("kind") == "thread" and x.get("thread_tol"):
+                out.append((x["thread_tol"], x.get("page"), x.get("bbox")))
     elif what == "std":
         for m in re.finditer(r"(?:ГОСТ|ОСТ|СТО|СТП)\s*Р?\s*[\d.]+", _text(d, "all")):
             out.append((re.sub(r"\s+", " ", m.group(0)), None, None))
@@ -291,3 +303,32 @@ def apply_to_drawing(drw, cfg: dict) -> None:
 def next_code(rules: list[dict]) -> str:
     nums = [int(r["code"][1:]) for r in rules if re.fullmatch(r"U\d{2,3}", r.get("code") or "")]
     return f"U{(max(nums) + 1) if nums else 1:02d}"
+
+
+def describe(rule: dict) -> dict:
+    """Описание правила предприятия для панели настроек: что проверяет и как."""
+    kind, title = rule.get("kind"), rule.get("title", "")
+    pat, where = rule.get("pattern") or "", WHERE.get(rule.get("where") or "tt", "")
+    values = rule.get("values") or []
+    vals = ", ".join(str(x) for x in values[:12]) + ("…" if len(values) > 12 else "")
+    what_l = LIST_WHAT.get(rule.get("what"), "")
+    how_pat = "регулярное выражение" if rule.get("match") == "regex" else "фрагмент"
+    ref = (" «" + str(rule.get("value")) + "»") if rule.get("check") != "filled" else ""
+    how = {
+        "text_required": f"В тексте ({where}) ищется {how_pat} «{pat}». Если его нет — замечание.",
+        "text_forbidden": f"В тексте ({where}) ищется {how_pat} «{pat}». Если найден — замечание.",
+        "field": f"Графа «{FIELDS.get(rule.get('field'), rule.get('field'))}» основной надписи: "
+                 f"{FIELD_CHECKS.get(rule.get('check'), '')}{ref}.",
+        "allowed": f"Значения ({what_l}) на чертеже сверяются с перечнем: {vals}. Всё, чего нет в перечне, — замечание.",
+        "forbidden": f"Значения ({what_l}) на чертеже сверяются с перечнем запрещённых: {vals}. Совпадение — замечание.",
+        "limit": f"{LIMIT_WHAT.get(rule.get('what'), '')} {rule.get('value')}: превышение — замечание.",
+    }.get(kind, "")
+    scope = [APPLIES.get(rule.get("applies") or "all", "")]
+    if rule.get("material_contains"):
+        scope.append(f"материал содержит «{rule['material_contains']}»")
+    if rule.get("designation_prefix"):
+        scope.append(f"обозначение начинается с «{rule['designation_prefix']}»")
+    if rule.get("when_tt"):
+        scope.append(f"в тексте чертежа есть «{rule['when_tt']}»")
+    return {"what": title, "how": how, "example": rule.get("message") or "",
+            "skip": "Правило применяется к: " + "; ".join(x for x in scope if x) + ".", "params": ""}

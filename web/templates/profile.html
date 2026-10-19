@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Профиль — проверка чертежей</title>
+<link rel="stylesheet" href="/static/style.css?v=20261015">
+</head>
+<body>
+<div class="topbar">
+  <a class="logo" href="/" title="К проверке"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 12h6M9 16h6"/></svg></a>
+  <div><h1>Профиль</h1><div class="muted" id="who"></div></div>
+  <div class="spacer"></div>
+  <a class="btn" href="/">К проверке</a>
+</div>
+<div class="wrap">
+  <div class="card">
+    <h2>Смена пароля</h2>
+    <form id="pf" class="grid-form" style="display:grid;gap:12px;max-width:340px">
+      <label>Текущий пароль<input type="password" id="old" autocomplete="current-password"></label>
+      <label>Новый пароль (не короче 4 символов)<input type="password" id="new" autocomplete="new-password"></label>
+      <label>Новый пароль ещё раз<input type="password" id="new2" autocomplete="new-password"></label>
+      <div id="msg"></div>
+      <div><button class="btn primary" type="submit">Сменить пароль</button></div>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Мои действия</h2>
+    <div id="act" class="muted">Загрузка…</div>
+  </div>
+</div>
+<script src="/static/user.js"></script>
+<script>
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+fetch('/api/me').then(r => r.json()).then(m => {
+  document.getElementById('who').textContent = `${m.name} · ${m.role === 'admin' ? 'администратор' : 'пользователь'} · с ${m.created}`;
+});
+document.getElementById('pf').onsubmit = async ev => {
+  ev.preventDefault();
+  const msg = document.getElementById('msg');
+  if (document.getElementById('new').value !== document.getElementById('new2').value) {
+    msg.innerHTML = '<div class="error-box">Новые пароли не совпадают</div>'; return;
+  }
+  const r = await fetch('/api/profile/password', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({old: document.getElementById('old').value, new: document.getElementById('new').value})});
+  const j = await r.json();
+  msg.innerHTML = r.ok ? '<div class="banner">Пароль изменён</div>' : `<div class="error-box">${esc(j.error)}</div>`;
+  if (r.ok) { ['old', 'new', 'new2'].forEach(i => document.getElementById(i).value = ''); document.querySelector('.warnbar')?.remove(); }
+};
+const det = d => typeof d === 'object' && d ? Object.entries(d).map(([k, v]) => k + ': ' + (Array.isArray(v) ? v.join(', ') : v)).join('; ') : (d || '');
+fetch('/api/profile/activity').then(r => r.json()).then(a => {
+  document.getElementById('act').innerHTML = a.length ? `<table class="grid"><tr><th>Когда</th><th>Действие</th><th>Подробности</th></tr>
+    ${a.slice(0, 100).map(x => `<tr><td class="mono">${esc(x.ts)}</td><td>${esc(x.action)}</td>
+    <td class="muted">${esc(det(x.detail))}</td></tr>`).join('')}</table>` : 'Действий пока нет';
+});
+</script>
+</body>
+</html>
