@@ -34,7 +34,7 @@ def drawing_to_dict(d: Drawing) -> dict:
         "facts": {k: d.facts.get(k) for k in ("overall", "sheet_thickness", "mass_bbox", "mass_ref",
                                               "is_assembly", "spec_item", "converted", "file_designation",
                                               "gear", "views", "spec_tree", "mass_view", "mass_parts", "spec_document", "spec_rows",
-                                              "process")},
+                                              "process", "classifier")},
         "findings": [f.to_dict() for f in d.findings],
         "suppressed": [f.to_dict() for f in d.suppressed],
         "welds": d.facts.get("welds", []),

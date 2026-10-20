@@ -21,7 +21,7 @@ from flask import (Flask, Response, abort, jsonify, redirect, render_template, r
 
 from checking import admin, catalog, custom, equipment, expert, feedback, users
 from checking.config import DEFAULTS, load_config, save_config, write_default_config
-from checking import norms, stdclauses, stdreg
+from checking import classifier, doctype, norms, stdclauses, stdreg
 from checking.normdata import OBSOLETE_STANDARDS
 from checking.completeness import completeness
 from checking.engine import SUPPORTED, check_file, check_job, collect_dxf, collect_files
@@ -186,7 +186,8 @@ def _run_job(job_id: str, files: list[tuple[str, str]], spec_path: str | None, u
             json.dump(job["results"], f, ensure_ascii=False, default=str)
         with open(os.path.join(jdir, "meta.json"), "w", encoding="utf-8") as f:
             json.dump({"spec_path": spec_path, "spec": job.get("spec"), "warnings": job["warnings"],
-                       "dxf": job.get("dxf"), "owner": job.get("owner"), "started": job.get("started")},
+                       "dxf": job.get("dxf"), "owner": job.get("owner"), "started": job.get("started"),
+                       "detected": job.get("detected")},
                       f, ensure_ascii=False)
         job["state"] = "done"
     except Exception as e:
@@ -225,7 +226,27 @@ def create_job():
                 pass
         return False
 
-    for fs in request.files.getlist("files"):
+    class _Upload:                                   # файл из общей загрузки, уже сохранённый во временную папку
+        def __init__(self, filename, src):
+            self.filename, self._src = filename, src
+
+        def save(self, dest):
+            shutil.move(self._src, dest)
+
+    extra: dict[str, list] = {doctype.DRAWING: [], doctype.SPEC: [], doctype.PROCESS: []}
+    detected: list[dict] = []
+    for ds in request.files.getlist("docs"):         # общая загрузка: вид каждого файла определяет программа
+        if not ds.filename:
+            continue
+        mixed = os.path.join(jdir, "_incoming")
+        os.makedirs(mixed, exist_ok=True)
+        tmp = os.path.join(mixed, uuid.uuid4().hex + os.path.splitext(ds.filename)[1].lower())
+        ds.save(tmp)
+        kind, why = doctype.classify(tmp)
+        extra[kind].append(_Upload(ds.filename, tmp))
+        detected.append({"file": _safe_name(ds.filename), "kind": kind, "why": why})
+
+    for fs in list(request.files.getlist("files")) + extra[doctype.DRAWING]:
         if not fs.filename:
             continue
         name = _safe_name(fs.filename)
@@ -260,7 +281,7 @@ def create_job():
                 files.append((p, os.path.relpath(p, folder)))
         dxf_paths += [p for p in collect_dxf([folder]) if fresh(p, os.path.relpath(p, folder), remove=False)]
     spec_path, spec_docs = None, []
-    for sf in request.files.getlist("spec"):                   # Excel (ERP) и спецификации КОМПАС (PDF/SPW)
+    for sf in list(request.files.getlist("spec")) + extra[doctype.SPEC]:                   # Excel (ERP) и спецификации КОМПАС (PDF/SPW)
         if not sf.filename:
             continue
         name = _safe_name(sf.filename)
@@ -294,7 +315,7 @@ def create_job():
             warnings.append(f"Спецификация «{name}» пропущена: нужен Excel (xlsx/xls) или PDF по форме 1 ГОСТ 2.106")
     process_files: list[tuple[str, str]] = []
     pdir = os.path.join(up, "process")
-    for pf in request.files.getlist("process"):               # маршрутные карты и технологические процессы
+    for pf in list(request.files.getlist("process")) + extra[doctype.PROCESS]:               # маршрутные карты и технологические процессы
         if not pf.filename:
             continue
         name = _safe_name(pf.filename)
@@ -315,7 +336,8 @@ def create_job():
                              "спецификации; маршрутные карты)"), 400
     use_ocr = request.form.get("ocr", "1") == "1"
     JOBS[job_id] = {"id": job_id, "state": "running", "total": len(files) + len(process_files), "done": 0, "current": "",
-                    "results": [], "warnings": warnings, "spec": None, "started": time.time(), "owner": _user()["name"]}
+                    "results": [], "warnings": warnings, "spec": None, "started": time.time(), "owner": _user()["name"],
+                    "detected": detected}
     feedback.log(_user()["name"], "Новая проверка", {"job": job_id, "files": len(files), "process": len(process_files),
                                                       "names": [n for _, n in files][:20]})
     threading.Thread(target=_run_job, args=(job_id, files, spec_path, use_ocr, dxf_paths, process_files, spec_docs),
@@ -338,7 +360,8 @@ def _job(job_id: str) -> dict:
                 meta = json.load(f)
         job = {"id": job_id, "state": "done", "total": len(results), "done": len(results), "current": "",
                "results": results, "warnings": meta.get("warnings", []), "spec": meta.get("spec"),
-               "dxf": meta.get("dxf"), "owner": meta.get("owner"), "started": meta.get("started")}
+               "dxf": meta.get("dxf"), "owner": meta.get("owner"), "started": meta.get("started"),
+               "detected": meta.get("detected")}
         JOBS[job_id] = job
     u = _user()
     if u and u["role"] != "admin" and job.get("owner") != u["name"]:
@@ -722,6 +745,47 @@ def _need_admin():
 
 
 # ------------------------------------------------------------------ нормативы (PDF стандартов) ----
+# ------------------------------------------------------------------ классификатор ЕСКД ----
+@app.get("/api/admin/classifier/info")
+def classifier_info():
+    _need_admin()
+    codes = classifier.data()["codes"]
+    names = {2: "class", 3: "subclass", 4: "group", 5: "subgroup", 6: "kind"}
+    counts = {v: sum(1 for c in codes if len(c) == k) for k, v in names.items()}
+    counts["total"] = len(codes)
+    rules = [{"code": r[0], "text": r[2], "sev": r[4]} for r in catalog.RULES if r[1] == "classifier"]
+    return jsonify(available=classifier.available(), version=classifier.data()["version"], source=classifier.data()["source"],
+                   counts=counts, rules=rules)
+
+
+@app.get("/api/admin/classifier/children")
+def classifier_children():
+    _need_admin()
+    prefix = "".join(ch for ch in request.args.get("prefix", "") if ch.isdigit())[:5]
+    return jsonify(classifier.children(prefix))
+
+
+@app.get("/api/admin/classifier/search")
+def classifier_search():
+    _need_admin()
+    return jsonify(classifier.search(request.args.get("q", "")))
+
+
+@app.get("/classifier/doc/<name>")
+def classifier_doc(name):
+    """Пояснительная записка (pz) и введение (vv) из справки классификатора."""
+    _need_admin()
+    if name not in ("pz", "vv"):
+        abort(404)
+    return send_from_directory(classifier.DIR, name + ".html", mimetype="text/html")
+
+
+@app.get("/classifier/img/pz/<path:fn>")
+def classifier_img(fn):
+    _need_admin()
+    return send_from_directory(os.path.join(classifier.DIR, "img", "pz"), fn)
+
+
 @app.get("/api/admin/standards/detail")
 def standards_detail():
     """Пункты загруженного стандарта: какие проверки на них ссылаются, отметки администратора."""

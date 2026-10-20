@@ -11,6 +11,44 @@ const Empty = ({ children }: { children: React.ReactNode }) => (
   <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{children}</p>
 )
 
+export function ClassifierTab({ doc }: { doc: DocResult }) {
+  const c = doc.facts?.classifier as { code: string; path: { code: string; name: string }[]; rows: { attr: string; code_says: string; drawing_shows: string; status: "ok" | "diff" | "unknown" }[] } | undefined
+  if (!c) return <Empty>Код классификации не проверялся: блок «Классификатор ЕСКД» выключен или в обозначении нет шестизначного кода.</Empty>
+  const diff = c.rows.filter(r => r.status === "diff").length
+  return (
+    <div className="grid gap-3">
+      <Card className="p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted-foreground">Код классификации</span>
+          <code className="rounded bg-muted px-2 py-0.5 text-sm font-semibold">{c.code}</code>
+          {c.rows.length > 0 && (diff ? <Badge variant="destructive">расхождений: {diff}</Badge> : <Badge>расхождений нет</Badge>)}
+        </div>
+        <ol className="mt-2 grid gap-0.5 text-sm">
+          {c.path.map((p, i) => <li key={p.code} style={{ paddingLeft: i * 14 }}><code className="mr-1.5 rounded bg-muted px-1 text-xs">{p.code}</code>{p.name}</li>)}
+        </ol>
+      </Card>
+      {c.rows.length > 0 && (
+        <Card className="overflow-hidden">
+          <Table>
+            <TableHeader><TableRow><TableHead>Признак</TableHead><TableHead>Что говорит код</TableHead><TableHead>Что на чертеже</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody>
+              {c.rows.map(r => (
+                <TableRow key={r.attr} className={r.status === "diff" ? "bg-[var(--sev-error-bg)]" : ""}>
+                  <TableCell className="font-medium">{r.attr}</TableCell>
+                  <TableCell className="whitespace-normal">{r.code_says}</TableCell>
+                  <TableCell className="whitespace-normal">{r.drawing_shows}</TableCell>
+                  <TableCell>{r.status === "diff" ? <Badge variant="destructive">расходится</Badge> : r.status === "ok" ? <Badge>совпадает</Badge> : <Badge variant="secondary">не определено</Badge>}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+      <p className="text-xs text-muted-foreground">Сверка пробная: программа ищет признаки в тексте и размерах чертежа и может не заметить отверстие или паз. «Расходится» — повод посмотреть чертёж и код, а не обязательная ошибка.</p>
+    </div>
+  )
+}
+
 export function DimsTab({ doc, onWrong }: { doc: DocResult; onWrong: (raw: string) => void }) {
   if (!doc.dims.length) return <Empty>Размеры не извлечены (для .cdw/.dft без САПР — только основная надпись и ТТ).</Empty>
   return (

@@ -2230,3 +2230,99 @@ def test_litera_and_sheets_rules():
     assert "C616" in codes("Л") and "C616" in codes("О0Х")
     assert not [c for c in codes("О1") if c == "C616"] and not [c for c in codes("А Б") if c == "C616"] and not [c for c in codes("") if c == "C616"]
     assert "C617" in codes("О", sheets="") and "C617" not in codes("О", sheets="1")
+
+
+def test_classifier_data_and_rules():
+    from checking import classifier
+    from checking.ext_class import check_classifier
+    from checking.model import Drawing, PageInfo, Dimension
+    assert classifier.available() and classifier.data()["version"] == "1.79.100"
+    assert classifier.lookup("741211") == "Без отв." and classifier.full_name("741211").count("›") == 4
+    assert classifier.features("741214")["holes"] is True and classifier.features("741211")["holes"] is False
+    assert classifier.features("741514")["slots"] is True and classifier.features("715122")["central_hole"] is True
+    assert classifier.children("")[0]["code"] == "04" and classifier.search("741211")[0]["code"] == "741211"
+
+    def run(des, dims=(), lines=()):
+        d = Drawing(path="x.pdf", filename="x.pdf")
+        d.pages = [PageInfo(0, 210, 297)]
+        d.title.found = True
+        d.title.designation = des
+        d.dims = list(dims)
+        from checking.model import TextLine
+        d.lines = [TextLine(t, 0, (10, 10, 30, 14), (1, 0), 3.5, (10, 14)) for t in lines]
+        check_classifier(d)
+        return [f.code for f in d.findings]
+
+    assert run("ДТМЛ.741211.001") == ["K102"]                                   # код есть, согласуется
+    assert "K101" in run("ДТМЛ.741219.001") and "K102" not in run("ДТМЛ.741219.001")   # вида 9 в группе нет
+    assert run("ДТМЛ.713000.001")[0] == "K102"                                  # нули в конце — уровень не указан
+    assert run("123-456789") == []                                              # другая система обозначений
+    assert "K103" in run("ДТМЛ.741211.001", lines=["4 отв. ⌀10"])                # код «без отв.», на чертеже отверстия
+    assert "K103" in run("ДТМЛ.741214.001")                                     # код «с отв.», отверстий нет
+    assert "K105" not in run("ДТМЛ.741211.001", lines=["в диапазоне 25..35"])    # «диапазон» не паз
+
+
+def test_classifier_module_off_by_default(tmp_path):
+    from checking import catalog
+    assert catalog.module_enabled({}, "cls") is False
+    assert catalog.rule_settings({}, "K101")[0] is False                        # выключен блок — выключены все проверки
+    assert catalog.rule_settings({"modules": {"cls": True}}, "K101")[0] is True
+    assert catalog.GROUP_MODULE["classifier"] == "cls"
+
+
+def test_doctype_classify(tmp_path):
+    import openpyxl
+    import pymupdf
+    from checking import doctype
+    x = tmp_path / "mk.xlsx"
+    wb = openpyxl.Workbook()
+    wb.active.append(["МАРШРУТНАЯ КАРТА", "ЮМЛТ.741211.022"])
+    wb.save(x)
+    assert doctype.classify(str(x))[0] == doctype.PROCESS
+    s = tmp_path / "sp.xlsx"
+    wb = openpyxl.Workbook()
+    wb.active.append(["Обозначение", "Наименование", "Количество"])
+    wb.save(s)
+    assert doctype.classify(str(s))[0] == doctype.SPEC
+
+    def pdf(name, text):
+        p = tmp_path / name
+        d = pymupdf.open()
+        d.new_page().insert_text((50, 50), text, fontname="helv")
+        d.save(p)
+        return str(p)
+    # шрифт helv без кириллицы: проверяем через латиницу в регулярном выражении не получится, поэтому берём реальный PDF с текстом
+    assert doctype.classify(pdf("c.pdf", "scale mass"))[0] == doctype.DRAWING
+    assert doctype.classify(str(tmp_path / "a.dxf"))[0] == doctype.DRAWING
+    assert doctype.classify(str(tmp_path / "t.docx"))[0] == doctype.PROCESS
+
+
+def test_classifier_comparison_table():
+    from checking.ext_class import check_classifier
+    from checking.model import Drawing, PageInfo, TextLine
+
+    def run(des, material="", lines=()):
+        d = Drawing(path="x.pdf", filename="x.pdf")
+        d.pages = [PageInfo(0, 210, 297)]
+        d.title.found = True
+        d.title.designation = des
+        d.title.material = material
+        d.lines = [TextLine(t, 0, (10, 10, 30, 14), (1, 0), 3.5, (10, 14)) for t in lines]
+        check_classifier(d)
+        return d
+
+    d = run("ДТМЛ.741211.001", lines=["4 отв. ⌀10"])
+    rows = {r["attr"]: r for r in d.facts["classifier"]["rows"]}
+    assert rows["Отверстия"]["status"] == "diff" and "K103" in [f.code for f in d.findings]
+    assert d.facts["classifier"]["code"] == "741211" and d.facts["classifier"]["path"][-1]["name"] == "Без отв."
+    assert [f.severity for f in d.findings if f.code == "K103"] == ["warning"]
+    d = run("ДТМЛ.715122.001")
+    assert "K106" in [f.code for f in d.findings]                                     # тело вращения без ⌀ на чертеже
+    d = run("ДТМЛ.741211.001", material="Швеллер 8П ГОСТ 8240")
+    assert "K107" in [f.code for f in d.findings]                                     # швеллер, а код не профильный
+    d = run("ДТМЛ.746211.001", material="Лист 8 ГОСТ 19903")
+    assert "K107" in [f.code for f in d.findings]                                     # код профильный, а заготовка — лист
+    d = run("ДТМЛ.746211.001", material="Швеллер 8П ГОСТ 8240")
+    assert "K107" not in [f.code for f in d.findings]
+    d = run("ДТМЛ.741211.001", material="Лист 8 ГОСТ 19903")
+    assert "K107" not in [f.code for f in d.findings]                                 # «профильные» из названия класса 74 не считается

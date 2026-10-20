@@ -103,6 +103,7 @@ export interface JobFull {
   error?: string
   warnings?: string[]
   spec?: { name: string; items: number }
+  detected?: { file: string; kind: "drawing" | "spec" | "process"; why: string }[] | null
   results?: DocResult[]
   completeness?: Completeness | null
 }

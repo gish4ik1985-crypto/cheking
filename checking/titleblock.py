@@ -160,7 +160,12 @@ def parse_title_block(drw: Drawing, words: list[Word]) -> None:
         tb.material = " / ".join([sort_rows[0] + " " + rest[0]] + rest[1:])
     # обозначение — самая крупная надпись над графой наименования (у шаблонов Solid Edge с графами
     # «Рев./Вер.» основная надпись выше стандартной на ~10 мм)
-    cand = [w for w in words if w.page == pg and 60 <= w.cx - ox <= 186 and -16 <= w.cy - oy <= 14
+    # выше штампа смотрим только если там есть графы «Рев./Вер.» (шаблон Solid Edge); иначе надпись над штампом
+    # (размер, фаска, примечание) к обозначению не относится
+    rev_strip = any(w.page == pg and 55 <= w.cx - ox <= 186 and -16 <= w.cy - oy <= 2 and re.fullmatch(r"(?i)(рев|вер)\.?", w.text.strip())
+                    for w in words)
+    top = -16 if rev_strip else -1.5
+    cand = [w for w in words if w.page == pg and 60 <= w.cx - ox <= 186 and top <= w.cy - oy <= 14
             and key(w.text) not in LABELS and not re.fullmatch(r"(?i)(рев|вер)\.?|\d{1,2}", w.text.strip())]
     if cand:
         hmax = max(w.bbox[3] - w.bbox[1] for w in cand)

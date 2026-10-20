@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
-import { ChevronDown, ChevronUp, FileSpreadsheet, FileText, FilePlus2, ListChecks, PanelLeftClose, PanelLeftOpen, Search, Target, Eye } from "lucide-react"
+import { ChevronDown, ChevronUp, FileSpreadsheet, FileText, FilePlus2, ListChecks, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Search, Target, Eye } from "lucide-react"
 import { toast } from "sonner"
 import { api, errText } from "@/lib/api"
 import { num } from "@/lib/format"
@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Counts, OkBadge, SevBadge, SEV_LABEL } from "@/components/sev"
 import Viewer, { type NFinding, type ViewerHandle } from "./report/Viewer"
 import FindingsTab from "./report/FindingsTab"
-import { DimsTab, FbTab, LimitsTab, OpsTab, RowsTab, TitleTab, TtTab } from "./report/OtherTabs"
+import { ClassifierTab, DimsTab, FbTab, LimitsTab, OpsTab, RowsTab, TitleTab, TtTab } from "./report/OtherTabs"
 
 const STATUS: Record<string, { sev: Sev | "ok"; text: string }> = {
   ok: { sev: "ok", text: "Без замечаний" }, warnings: { sev: "warning", text: "Проверить" }, errors: { sev: "error", text: "Есть ошибки" },
@@ -109,6 +109,7 @@ export default function ReportPage() {
   const [kvOpen, setKvOpen] = useState(false)
   const [q, setQ] = useState("")
   const [docsOpen, setDocsOpen] = useState(() => { try { return localStorage.getItem("rep-side") !== "0" && window.innerWidth >= 1100 } catch { return true } })
+  const [panelOpen, setPanelOpen] = useState(() => { try { return localStorage.getItem("rep-panel") !== "0" } catch { return true } })
   const [panelW, setPanelW] = useState(() => { try { return Number(localStorage.getItem("rep-panel-w")) || 460 } catch { return 460 } })
   const viewer = useRef<ViewerHandle>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -160,7 +161,8 @@ export default function ReportPage() {
     const o: [string, string] = ["fb", `Отметки (${docFb.length})`]
     if (isProc) return [f, ["ops", `Операции (${(doc.facts?.process?.operations || []).length})`], o]
     if (isSpec && specDoc) return [f, ["rows", `Строки (${(doc.facts?.spec_rows || []).length})`], o]
-    return [f, ["dims", `Размеры (${doc.dims.length})`], ["limits", "Допуски"], ["title", "Основная надпись"], ["tt", `ТТ (${doc.tt.length})`], o]
+    const cls: [string, string][] = doc.facts?.classifier ? [["cls", "Классификатор"]] : []
+    return [f, ["dims", `Размеры (${doc.dims.length})`], ["limits", "Допуски"], ["title", "Основная надпись"], ...cls, ["tt", `ТТ (${doc.tt.length})`], o]
   }, [doc, findings.length, docFb.length, isProc, isSpec, specDoc])
   useEffect(() => { if (tabs.length && !tabs.some(t => t[0] === tab)) setTab("findings") }, [tabs, tab])
 
@@ -236,6 +238,7 @@ export default function ReportPage() {
     document.body.style.userSelect = "none"
     window.addEventListener("mousemove", mv); window.addEventListener("mouseup", up)
   }
+  const togglePanel = () => { setPanelOpen(o => { try { localStorage.setItem("rep-panel", o ? "0" : "1") } catch { /* без хранилища */ } return !o }) }
   const toggleDocs = () => { setDocsOpen(o => { try { localStorage.setItem("rep-side", o ? "0" : "1") } catch { /* без хранилища */ } return !o }) }
 
   const list = order.filter(i => {
@@ -247,6 +250,10 @@ export default function ReportPage() {
   if (!job) return <div className="p-6 text-sm text-muted-foreground">Загрузка отчёта…</div>
 
   const specInfo = job.spec ? ` · спецификация «${job.spec.name}» (${job.spec.items} поз.)` : ""
+  const det = job.detected || []
+  const detInfo = det.length && det.some(x => x.kind !== "drawing")
+    ? ` · определено: чертежей ${det.filter(x => x.kind === "drawing").length}, спецификаций Excel ${det.filter(x => x.kind === "spec").length}, технологических документов ${det.filter(x => x.kind === "process").length}`
+    : ""
   const summary = doc ? [doc.title.mass ? `Масса ${doc.title.mass} кг` : "", [doc.title.scale, doc.title.format].filter(Boolean).join(" · "), doc.title.material].filter(Boolean) : []
 
   const panel = doc && (
@@ -275,6 +282,7 @@ export default function ReportPage() {
         {tab === "dims" && <DimsTab doc={doc} onWrong={parseDlg} />}
         {tab === "limits" && <LimitsTab doc={doc} />}
         {tab === "title" && <TitleTab doc={doc} />}
+        {tab === "cls" && <ClassifierTab doc={doc} />}
         {tab === "tt" && <TtTab doc={doc} />}
         {tab === "ops" && <OpsTab doc={doc} />}
         {tab === "rows" && <RowsTab doc={doc} />}
@@ -292,7 +300,7 @@ export default function ReportPage() {
         <div className="min-w-0">
           <h1 className="text-sm font-semibold">Отчёт проверки</h1>
           <p className="truncate text-xs text-muted-foreground">
-            {data.length} док.{specInfo}{job.state === "running" ? ` · идёт проверка ${job.done}/${job.total}…` : ""}
+            {data.length} док.{specInfo}{detInfo}{job.state === "running" ? ` · идёт проверка ${job.done}/${job.total}…` : ""}
             {job.warnings?.length ? <span className="text-[var(--sev-error)]"> · {job.warnings.join("; ")}</span> : null}
           </p>
         </div>
@@ -305,6 +313,9 @@ export default function ReportPage() {
           <Button variant="outline" size="sm" render={<a href={`/api/jobs/${jobId}/excel`} />}><FileSpreadsheet />Excel</Button>
           <Button variant="outline" size="sm" title="Перечень замечаний для конструктора" render={<a href={`/api/jobs/${jobId}/remarks.docx`} />}><FileText />Word</Button>
           <Button variant="outline" size="sm" onClick={() => nav("/")}><FilePlus2 />Новая проверка</Button>
+          <Button variant="outline" size="icon-sm" onClick={togglePanel} title="Скрыть или показать панель замечаний справа" aria-label="Панель замечаний">
+            {panelOpen ? <PanelRightClose /> : <PanelRightOpen />}
+          </Button>
         </div>
       </div>
 
@@ -388,8 +399,8 @@ export default function ReportPage() {
                       <Viewer ref={viewer} doc={doc} jobId={jobId} findings={findings} selected={selected} onSelect={select} pick={pick} onPick={onPick}
                         missed={docFb.filter(e => e.type === "missed")} />
                     </div>
-                    <div onMouseDown={startResize} title="Потяните, чтобы изменить ширину" className="hidden w-1.5 shrink-0 cursor-col-resize rounded bg-border transition hover:bg-primary/50 lg:block" />
-                    {panel}
+                    {panelOpen && <div onMouseDown={startResize} title="Потяните, чтобы изменить ширину" className="hidden w-1.5 shrink-0 cursor-col-resize rounded bg-border transition hover:bg-primary/50 lg:block" />}
+                    {panelOpen && panel}
                   </>
                 ) : <div className="min-h-0 flex-1 [&>div]:h-full">{panel}</div>}
               </div>

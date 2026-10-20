@@ -10,11 +10,12 @@ import RulesTab from "./admin/RulesTab"
 import CustomTab from "./admin/CustomTab"
 import EquipmentTab from "./admin/EquipmentTab"
 import { StandardsTab } from "./admin/StandardsTab"
+import { ClassifierTab } from "./admin/ClassifierTab"
 import { ExceptionsTab, ListsTab, LogTab, NormsTab, ParamsTab, ReviewTab, UsersTab } from "./admin/OtherAdminTabs"
 
 const TABS: [string, string][] = [
   ["rules", "Проверки по стандартам"], ["custom", "Свои правила"], ["params", "Параметры"], ["equip", "Оборудование"], ["lists", "Справочники"],
-  ["ex", "Исключения «не ошибка»"], ["users", "Пользователи"], ["stds", "Реестр стандартов"], ["norms", "Нормативы"], ["review", "Отметки тестеров"], ["log", "Журнал действий"],
+  ["ex", "Исключения «не ошибка»"], ["users", "Пользователи"], ["stds", "Реестр стандартов"], ["cls", "Классификатор"], ["norms", "Нормативы"], ["review", "Отметки тестеров"], ["log", "Журнал действий"],
 ]
 const clone = <T,>(o: T): T => JSON.parse(JSON.stringify(o))
 
@@ -119,6 +120,7 @@ export default function AdminPage() {
           <TabsContent value="ex" className="pt-3"><ExceptionsTab /></TabsContent>
           <TabsContent value="users" className="pt-3"><UsersTab /></TabsContent>
           <TabsContent value="stds" className="pt-3"><StandardsTab /></TabsContent>
+          <TabsContent value="cls" className="pt-3"><ClassifierTab /></TabsContent>
           <TabsContent value="norms" className="pt-3"><NormsTab /></TabsContent>
           <TabsContent value="review" className="pt-3"><ReviewTab /></TabsContent>
           <TabsContent value="log" className="pt-3"><LogTab /></TabsContent>
