@@ -65,6 +65,45 @@ def _norm_id(fn: str) -> str:
     return os.path.basename(fn)
 
 
+_META_CACHE: dict[str, tuple] = {}
+
+
+def _quick_meta(path: str) -> tuple[int, bool]:
+    """(число страниц, есть ли текст) без чтения всего файла: по первым десяти страницам; результат помнится в памяти и в
+    файле .meta.json рядом с PDF (ключ — размер и время изменения), поэтому список нормативов открывается быстро."""
+    st = os.stat(path)
+    key = f"{st.st_size}:{int(st.st_mtime)}"
+    hit = _META_CACHE.get(path)
+    if hit and hit[0] == key:
+        return hit[1], hit[2]
+    mp = os.path.join(os.path.dirname(path), ".meta.json")
+    try:
+        with open(mp, encoding="utf-8") as f:
+            disk = json.load(f)
+    except (OSError, ValueError):
+        disk = {}
+    ent = disk.get(os.path.basename(path))
+    if ent and ent.get("k") == key:
+        _META_CACHE[path] = (key, ent["pages"], ent["text"])
+        return ent["pages"], ent["text"]
+    try:
+        import pymupdf
+        with pymupdf.open(path) as d:
+            n = len(d)
+            chars = sum(len(d[i].get_text()) for i in range(min(n, 10)))
+        has_text = chars >= 50 * min(n, 10)
+    except Exception:
+        n, has_text = 0, False
+    _META_CACHE[path] = (key, n, has_text)
+    disk[os.path.basename(path)] = {"k": key, "pages": n, "text": has_text}
+    try:
+        with open(mp, "w", encoding="utf-8") as f:
+            json.dump(disk, f, ensure_ascii=False)
+    except OSError:
+        pass
+    return n, has_text
+
+
 def listing() -> list[dict]:
     """Все нормативы: программа + добавленные администраторами (одноимённый файл администратора заменяет файл программы)."""
     items: dict[str, dict] = {}
@@ -77,14 +116,10 @@ def listing() -> list[dict]:
                 continue
             path = os.path.join(d, fn)
             meta = idx.get(fn, {})
-            try:
-                pages = pages_text(path)
-            except Exception:
-                pages = ()
-            has_text = sum(len(t) for t in pages) > 200 * max(1, len(pages)) // 4
+            n_pages, has_text = _quick_meta(path)
             des = meta.get("designation") or os.path.splitext(fn)[0]
             items[fn] = {"id": fn, "title": meta.get("title") or "", "designation": des, "file": fn, "source": source,
-                         "pages": len(pages), "size": os.path.getsize(path), "has_text": has_text, "path": path}
+                         "pages": n_pages, "size": os.path.getsize(path), "has_text": has_text, "path": path}
     return sorted(items.values(), key=lambda x: x["designation"])
 
 

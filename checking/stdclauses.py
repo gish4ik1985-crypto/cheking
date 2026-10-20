@@ -22,7 +22,7 @@ PATH = os.path.join(DATA, "std_marks.json")
 STATUSES = ("open", "done", "rejected")
 _LOCK = threading.Lock()
 
-_CLAUSE = re.compile(r"^(\d{1,2}(?:\.\d{1,3}){0,4})\s+(?=\S)")
+_CLAUSE = re.compile(r"^(\d{1,2}(?:\.\d{1,3}){0,4})\.?\s+(?=\S)")           # в старых стандартах после номера стоит точка: «1.1. Текст»
 _NUM_ONLY = re.compile(r"^(\d{1,2}(?:\.\d{1,3}){1,4})$")
 _START = re.compile(r"(?m)^\s*1\s+Область применения")
 
@@ -137,7 +137,7 @@ def _std_texts(cfg: dict) -> dict[str, list[str]]:
     return texts
 
 
-def coverage(cfg: dict, key: tuple) -> dict:
+def coverage(cfg: dict, key: tuple, edition: tuple | None = None) -> dict:
     """Проверки, ссылающиеся на стандарт с ключом key = (вид, номер): по пунктам и без пункта.
     {"by_clause": {"7.3.4": [code…]}, "whole": [code…], "codes": {code: {"text", "sev", "default"}}}"""
     from .stdreg import _key
@@ -152,6 +152,9 @@ def coverage(cfg: dict, key: tuple) -> dict:
             for i, m in enumerate(ms):
                 if _key(m.group(0)) != key:
                     continue
+                dm = norms.parse_designation(m.group(0))
+                if edition and dm and dm[3] and edition[1] and (dm[3], dm[1]) != (edition[1], edition[0]):
+                    continue                          # ссылка на другую редакцию этого стандарта (другой год или «Р»)
                 nums = _nums(t[m.end(): ms[i + 1].start() if i + 1 < len(ms) else len(t)])
                 if not nums and code not in whole:
                     whole.append(code)
@@ -168,7 +171,8 @@ def detail(cfg: dict, norm_id: str) -> dict | None:
     if not it:
         return None
     key = _key(it["designation"] if norms.parse_designation(it["designation"]) else it["id"])
-    cov = coverage(cfg, key)
+    de = norms.parse_designation(it["designation"])
+    cov = coverage(cfg, key, (de[1], de[3]) if de else None)
     marks = [m for m in load_marks() if m["file_id"] == it["id"]]
     rows = []
     for c in clauses(it["path"]):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from functools import lru_cache
 
 from . import catalog, norms, stdclauses
 from .normdata import OBSOLETE_STANDARDS
@@ -35,6 +36,19 @@ def _fmt(d: tuple) -> str:
     return f"{kind}{' Р' if nat else ''} {num}" + (f"-{full}" if yr else "")
 
 
+@lru_cache(maxsize=256)
+def _head_cached(path: str, mtime: float) -> tuple:
+    import pymupdf
+    with pymupdf.open(path) as d:
+        return tuple(d[i].get_text() for i in range(min(3, len(d))))
+
+
+def _head(path: str) -> tuple:
+    """Текст первых трёх страниц (для сверки обозначения) без чтения всего файла."""
+    import os
+    return _head_cached(path, os.path.getmtime(path))
+
+
 def _in_document(path: str, exp: tuple) -> bool:
     """Обозначение стандарта (вид, номер, год) встречается в тексте файла не меньше трёх раз (колонтитулы): сборник или обложка со списком."""
     try:
@@ -55,7 +69,7 @@ def verify(path: str, designation: str, title: str = "") -> dict:
     название из перечня должно встречаться в тексте. status: ok | bad (другой документ или другая редакция) |
     warn (название не найдено) | scan (текста нет, проверить нельзя)."""
     try:
-        pages = norms.pages_text(path)[:3]
+        pages = _head(path)
     except Exception:
         return {"status": "scan", "detected": "", "note": "файл не читается"}
     flat = re.sub(r"\s+", " ", " ".join(pages))
@@ -95,7 +109,7 @@ def reconcile(path: str, designation: str) -> tuple[str, str]:
     или файл на самом деле другой стандарт (в тексте повторяется другое обозначение, а названное не встречается),
     возвращается обозначение из текста. Иначе — прежнее и пустая причина."""
     try:
-        flat = re.sub(r"\s+", " ", " ".join(norms.pages_text(path)[:3]))
+        flat = re.sub(r"\s+", " ", " ".join(_head(path)))
     except Exception:
         return designation, ""
     cnt = Counter()

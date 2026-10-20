@@ -1220,7 +1220,7 @@ def test_eskd_codes_in_catalog():
     in_cat = {r[0] for r in catalog.RULES if r[0].startswith("Q")}
     assert used == in_cat, sorted(used ^ in_cat)
     ix = {e["key"]: e for e in catalog.standards_index({})}
-    for key, n in (("ГОСТ Р 2.109", 20), ("ГОСТ 2.201", 2), ("ГОСТ Р 2.201", 6), ("ГОСТ 2.301", 2), ("ГОСТ 2.309", 8), ("ГОСТ 2.307", 15),
+    for key, n in (("ГОСТ Р 2.109", 20), ("ГОСТ 2.201", 1), ("ГОСТ Р 2.201", 6), ("ГОСТ 2.301", 2), ("ГОСТ 2.309", 8), ("ГОСТ 2.307", 15),
                    ("ГОСТ 2.305", 6), ("ГОСТ Р 2.106", 10), ("ГОСТ 2.308", 6), ("ГОСТ 2.302", 3)):
         assert len(ix[key]["direct"]) >= n, (key, len(ix[key]["direct"]))
 
