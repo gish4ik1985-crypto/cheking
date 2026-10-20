@@ -17,7 +17,7 @@ interface Row {
   cited_other: string[]; replaced_by: string; catalog_was: string; marks_open: number
 }
 interface Registry { sections: { key: string; title: string }[]; rows: Row[]; summary: { total: number; loaded: number; needed_missing: number; edition_mismatch: number; check_failed: number; no_checks: number; marks_open: number; stale_refs: number } }
-interface UpRes { file: string; ok: boolean; designation?: string; recognized?: boolean; error?: string; check?: Check }
+interface UpRes { file: string; ok: boolean; designation?: string; recognized?: boolean; error?: string; check?: Check; corrected?: string }
 
 type Filter = "all" | "missing" | "loaded" | "needed" | "stale" | "nochecks"
 const FILTERS: [Filter, string][] = [["all", "Все"], ["needed", "Нужны правилам, PDF нет"], ["missing", "PDF нет"], ["loaded", "PDF есть"], ["nochecks", "PDF есть, проверок нет"], ["stale", "Прежняя редакция в правилах"]]
@@ -133,6 +133,7 @@ export function StandardsTab() {
             {res.map((r, i) => (
               <div key={i} className={r.ok ? "" : "text-destructive"}>
                 {r.file} — {r.ok ? (r.recognized ? `распознан как ${r.designation}` : "обозначение не распознано, добавлено по имени файла; уточните во вкладке «Нормативы»") : r.error}
+                {r.corrected && <span className="text-emerald-600"> · обозначение исправлено по тексту файла: {r.designation}</span>}
                 {r.check && r.check.status !== "ok" && <span className={r.check.status === "bad" ? "font-medium text-destructive" : "text-amber-600"}> · {r.check.note}</span>}
               </div>
             ))}
@@ -177,7 +178,7 @@ export function StandardsTab() {
                   <TableHeader><TableRow><TableHead>Стандарт</TableHead><TableHead>Состояние</TableHead><TableHead>Проверок</TableHead><TableHead /></TableRow></TableHeader>
                   <TableBody>
                     {g.shown.map(r => (
-                      <TableRow key={r.designation}>
+                      <TableRow key={r.designation + "|" + (r.file?.id ?? "")}>
                         <TableCell className="whitespace-normal"><b>{r.designation}</b><div className="text-xs text-muted-foreground">{r.title}</div>
                           {r.catalog_was && <div className="text-xs text-emerald-600">загружена редакция новее, чем в перечне ({r.catalog_was})</div>}
                           {r.replaced_by && <div className="text-xs text-amber-600">заменён на {r.replaced_by}</div>}

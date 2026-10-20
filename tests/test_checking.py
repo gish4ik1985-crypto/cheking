@@ -2147,7 +2147,7 @@ def test_standards_registry():
     rows = {r["designation"]: r for r in reg["rows"]}
     assert reg["summary"]["total"] == len(reg["rows"]) > 150
     assert rows["ГОСТ Р 2.106-2019"]["file"] and rows["ГОСТ Р 2.106-2019"]["file"]["same_edition"]   # PDF из standards/
-    assert rows["ГОСТ 2.301-68"]["file"] is None and rows["ГОСТ 2.301-68"]["rules"] > 0              # правила есть, PDF нет
+    assert rows["ГОСТ 25347-2013"]["file"] is None and rows["ГОСТ 25347-2013"]["rules"] > 0              # правила есть, PDF нет
     assert "ГОСТ 2.109-73" not in rows["ГОСТ Р 2.109-2023"]["cited_other"]                            # ссылки правил переведены на Р 2.109-2023
     assert rows["ГОСТ Р 2.109-2023"]["rules"] >= 20 and rows["ГОСТ Р 2.316-2023"]["rules"] >= 12
     assert stdreg.detect_designation("ГОСТ 25346-2013.pdf") == "ГОСТ 25346-2013"

@@ -804,8 +804,11 @@ def standards_upload():
             des = forced if (forced and len(files) == 1) else stdreg.detect_designation(name, first)
             title = titles.get(stdreg._key(des), "") if des else ""
             it = norms.add(name, data, title, des)
+            fixed, why = stdreg.reconcile(it["path"], it["designation"])          # обозначение из текста важнее имени файла
+            if why and fixed != it["designation"]:
+                it = norms.update(it["id"], it["title"], fixed) or it
             out.append({"file": name, "ok": True, "designation": it["designation"], "recognized": bool(des), "title": it["title"],
-                        "check": stdreg.verify(it["path"], it["designation"], it["title"])})
+                        "corrected": why, "check": stdreg.verify(it["path"], it["designation"], it["title"])})
             feedback.log(_user()["name"], "Добавлен норматив", {"file": it["id"]})
         except ValueError as e:
             out.append({"file": name, "ok": False, "error": str(e)})
