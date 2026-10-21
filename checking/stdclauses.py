@@ -81,7 +81,7 @@ def _graphs(path: str, mtime: float) -> tuple:
     cur = None
     last = 0
     for pn, t in enumerate(pages):
-        if not re.search(r"(?i)таблиц\w*\s*1|Номер\s+графы", t) or "Приложение А" in t[:400] and "Т а б л и ц а 1" not in t:
+        if not re.search(r"(?i)таблиц\w*\s*1(?<![A-Za-z])|Номер\s+графы", t) or "Приложение А" in t[:400] and "Т а б л и ц а 1" not in t:
             continue
         for raw in t.split("\n"):
             line = raw.replace("­", "").strip()
@@ -140,7 +140,7 @@ def _std_texts(cfg: dict) -> dict[str, list[str]]:
 def coverage(cfg: dict, key: tuple, edition: tuple | None = None) -> dict:
     """Проверки, ссылающиеся на стандарт с ключом key = (вид, номер): по пунктам и без пункта.
     {"by_clause": {"7.3.4": [code…]}, "whole": [code…], "codes": {code: {"text", "sev", "default"}}}"""
-    from .stdreg import _key
+    from .stdreg import _key, _OST4
     info = {c: {"text": t, "sev": sev, "default": d} for c, _g, t, d, sev in catalog.all_rules(cfg)}
     by_clause: dict[str, list[str]] = {}
     whole: list[str] = []
@@ -148,7 +148,9 @@ def coverage(cfg: dict, key: tuple, edition: tuple | None = None) -> dict:
         if code not in info:
             continue
         for t in texts:
-            ms = list(norms._DESIG.finditer(t))      # в одной строке может быть несколько стандартов: «…; ГОСТ … п. 6.1»
+            ost = list(_OST4.finditer(t))            # «ОСТ4 ГО.070.014» целиком: общий разбор видит в нём только «ОСТ4»
+            ms = sorted(ost + [m for m in norms._DESIG.finditer(t) if not any(o.start() <= m.start() < o.end() for o in ost)],
+                        key=lambda m: m.start())      # в одной строке может быть несколько стандартов: «…; ГОСТ … п. 6.1»
             for i, m in enumerate(ms):
                 if _key(m.group(0)) != key:
                     continue
@@ -253,3 +255,147 @@ def delete_mark(mark_id: str) -> bool:
             return False
         _save(rest)
     return True
+
+
+# ------------------------------------------------------------ подсказки: что в стандарте можно проверять
+_SKIP_HEAD = re.compile(r"(?i)^(область применения|нормативные ссылки|термины|определени|сокращени|предисловие|введение|библиограф|общие положения$)")
+_MODAL = re.compile(r"(?i)\b(должн\w*|следует|не допуска\w*|допускается|не более|не менее|запрещ\w*|обязательн\w*|необходимо|не должн\w*)\b")
+_NUMERIC = re.compile(r"(?i)(±|\d\s?(?:мм|мкм|°|%|кг|н\b|мпа|квт|с\b|мин|шт)|\bR[az]\s?\d|\bIT\s?\d+|\d+\s*[xх×]\s*\d+|не более|не менее|от \d+ до \d+)")
+_SHOW = re.compile(r"(?i)\b(указыва\w*|наносят|обознача\w*|приводят|записыва\w*|изображ\w*|проставля\w*|вноси\w*|должн\w* быть (?:указан|нанесен|приведен|обозначен))")
+_DRAW = re.compile(r"(?i)(чертеж|размер|надпис|штамп|обозначени|шероховат|допуск|отклонен|резьб|линии|линий|шрифт|масштаб|формат|спецификац|таблиц|граф[аыеу]|технически\w* требован|покрыти|материал|маркиров|сварн|шов|вид[аеыов]?\b|разрез|сечени|ссылк)")
+_ORG = re.compile(r"(?i)(организац|предприяти|разработчик|заказчик|порядок|регистрац|хранени|утвержден|внедрен|применяют)")
+
+
+def _readable(s: str) -> bool:
+    """Отсекает мусор распознавания и таблиц: нужны слова, а не россыпь букв и цифр."""
+    body = re.sub(r"\s+", "", s)
+    words = re.findall(r"[А-Яа-яЁё]{3,}", s)
+    return len(body) > 0 and sum(len(w) for w in words) / len(body) >= 0.55 and len(words) >= 4
+
+
+def _sentences(text: str) -> list[str]:
+    text = re.sub(r"\((?:Измененная|Введен\w*|Исключен\w*)[^)]*\)", " ", text)
+    text = re.sub(r"\s+\d{1,3}\.?\s+(?:ГОСТ|С\.)[^.]{0,30}$", "", text)
+    out = []
+    for s in re.split(r"(?<=[.;:])\s+(?=[А-ЯЁ\-–—«(])", text):
+        s = re.sub(r"\s+\d{1,2}\.\s*$", ".", s.strip())
+        if len(s) > 25 and _readable(s) and not s.startswith("Издание"):
+            out.append(s)
+    return out
+
+
+def _hint(sent: str) -> str:
+    if _NUMERIC.search(sent):
+        return "числовое ограничение: сравнить значение на чертеже"
+    if re.search(r"(?i)не допуска\w*|запрещ\w*", sent):
+        return "запрет: проверить, что на чертеже этого нет"
+    if _SHOW.search(sent):
+        return "обязательная запись или обозначение: проверить наличие"
+    return "требование оформления"
+
+
+_WHERE = [
+    (r"(?i)шероховат", "в обозначениях шероховатости на изображении и в знаке «в остальном» (поле чертежа)"),
+    (r"(?i)технически\w* требован", "в технических требованиях на поле чертежа"),
+    (r"(?i)основн\w* надпис|штамп|граф[аыеу]\b", "в основной надписи (штампе) чертежа"),
+    (r"(?i)спецификац", "в спецификации (таблица или отдельный документ)"),
+    (r"(?i)резьб", "в размерах и обозначениях резьбы на видах и разрезах"),
+    (r"(?i)покрыти|термообработ|материал", "в обозначении материала, покрытия, в технических требованиях и графе материала"),
+    (r"(?i)размер|отклонен|допуск|квалитет|посадк", "в размерных числах и допусках на видах, разрезах и сечениях"),
+    (r"(?i)линии|линий|штрих|шрифт|стрелк", "в графике чертежа: типы линий, шрифт, стрелки"),
+    (r"(?i)обозначени|надпис|запис", "в надписях и обозначениях на поле чертежа"),
+    (r"(?i)вид[аеыов]?\b|разрез|сечени|выносн", "в изображениях: виды, разрезы, сечения"),
+]
+_READABLE_SIMPLE = re.compile(r"(?i)(шероховат|размер|отклонен|допуск|надпис|обозначени|резьб|технически\w* требован|материал|покрыти|штамп|граф[аыеу]\b|спецификац|запис|масштаб|формат)")
+_READABLE_HARD = re.compile(r"(?i)(изображ|вид[аеыов]?\b|разрез|сечени|линии|линий|штрих|стрелк|симметрич|расположен|взаимн|форм[аыуе]\b)")
+
+
+def _where(sent: str) -> str:
+    for rx, txt in _WHERE:
+        if re.search(rx, sent):
+            return txt
+    return "на листе чертежа (место уточним по тексту пункта)"
+
+
+_LIMIT = re.compile(r"(?i)(?:от\s+[\d.,]+\s+до\s+[\d.,]+\s?(?:мм|мкм|°|%)?|[±]\s?[\d.,]+\s?(?:мм|мкм|°|%)?|[\d.,]+\s?(?:мм2?|мкм|°|%|МПа|кгс/мм2|кг|Н|кВт|с|мин|шт)(?![А-Яа-яA-Za-z])|(?<![A-Za-z])R[az]\s?[\d.,]+|(?<![A-Za-z])IT\s?\d+|[\d.,]+\s*[xх×]\s*[\d.,]+\s?°?)")
+
+
+def _limits(sent: str) -> str:
+    vals = []
+    for m in _LIMIT.finditer(sent):
+        v = re.sub(r"\s+", " ", m.group(0)).strip(" .,")
+        if v and v not in vals:
+            vals.append(v)
+    return ", ".join(vals[:4])
+
+
+def _plan(sent: str, hint: str) -> dict:
+    """Черновик описания проверки: что, где, как, когда ошибка, насколько сложно. Это предположение, его правит администратор."""
+    lim = _limits(sent)
+    if hint.startswith("числовое"):
+        how = "Найти на чертеже соответствующее значение и сравнить с пределом из пункта" + (f" ({lim})" if lim else "") + "."
+        err = "значение на чертеже выходит за допустимый предел" + (f" ({lim})" if lim else "") + "."
+    elif hint.startswith("запрет"):
+        how = "Найти на чертеже то, что пункт запрещает (в тексте надписей или в обозначениях), и показать место."
+        err = "на чертеже есть запрещённая запись или обозначение."
+    elif hint.startswith("обязательная"):
+        how = "Проверить, что требуемая запись или обозначение есть на чертеже и записано по форме пункта."
+        err = "требуемой записи или обозначения нет либо оно оформлено иначе, чем в пункте."
+    else:
+        how = "Сверить оформление на чертеже с формулировкой пункта; способ сравнения уточняется при разработке правила."
+        err = "оформление расходится с требованием пункта."
+    if _READABLE_HARD.search(sent) and not _READABLE_SIMPLE.search(sent):
+        hardness = "сложно: нужен анализ изображения (виды, линии, взаимное расположение), текстом не проверить"
+    elif _READABLE_SIMPLE.search(sent):
+        hardness = "реально: нужные данные программа уже читает с чертежа (надписи, размеры, обозначения)"
+    else:
+        hardness = "нужно уточнить, какие данные чертежа для этого понадобятся"
+    return {"what": sent[:300], "where": _where(sent), "how": how, "error": err, "hardness": hardness}
+
+
+def _draft(plan: dict) -> str:
+    return (f"Что проверяем: {plan['what']}\nГде: {plan['where']}\nКак: {plan['how']}\n"
+            f"Ошибка, если: {plan['error']}\nСложность: {plan['hardness']}")
+
+
+def suggest(cfg: dict, norm_id: str, limit: int = 12, include_all: bool = False) -> dict | None:
+    """Пункты стандарта без проверок: кандидаты (по формулировкам есть проверяемое требование) и черновик описания проверки.
+    include_all — вернуть описание для всех пунктов без проверок (candidate=False у не похожих на требование).
+    Это эвристика по тексту, а не готовые правила."""
+    d = detail(cfg, norm_id)
+    if not d:
+        return None
+    taken = {m["clause"] for m in d_marks(norm_id)}
+    out, total = [], 0
+    for c in d["clauses"]:
+        if c["checks"] or c["child_checks"] or c["n"].startswith(("гр.", "0.")):
+            continue
+        text = c["text"]
+        if len(text) < 40 or _SKIP_HEAD.match(text.strip()):
+            continue
+        total += 1
+        sents = _sentences(text)
+        cands = [(s, len(_MODAL.findall(s)) * 2 + (2 if _NUMERIC.search(s) else 0) + (1 if _SHOW.search(s) else 0)
+                  + (2 if _DRAW.search(s) else 0) - (2 if _ORG.search(s) else 0)) for s in sents if _MODAL.search(s)]
+        if cands:
+            best, score = max(cands, key=lambda x: x[1])
+            score += min(2, len(cands) - 1)
+        elif include_all and (sents or text):
+            best, score = (sents[0] if sents else text[:260]), 0
+        else:
+            continue
+        candidate = score >= 4
+        if not candidate and not include_all:
+            continue
+        hint = _hint(best)
+        plan = _plan(best, hint)
+        out.append({"n": c["n"], "page": c["page"], "excerpt": best[:260], "hint": hint, "score": score, "candidate": candidate,
+                    "marked": c["n"] in taken or bool(c["marks"]), "plan": plan, "draft": _draft(plan)})
+    out.sort(key=lambda x: (-x["score"], x["n"]))
+    found = sum(1 for x in out if x["candidate"])
+    return {"id": d["id"], "designation": d["designation"], "items": out if include_all else out[:limit], "found": found,
+            "clauses_without_checks": total}
+
+
+def d_marks(norm_id: str) -> list[dict]:
+    return [m for m in load_marks() if m["file_id"] == norm_id]

@@ -2,19 +2,63 @@
 Для каждого стандарта: загружен ли PDF, сколько проверок на него ссылается, какую редакцию называют правила."""
 from __future__ import annotations
 
+import json
+import os
 import re
 from collections import Counter
 from functools import lru_cache
 
 from . import catalog, norms, stdclauses
+from .config import DATA
 from .normdata import OBSOLETE_STANDARDS
 from .stdcatalog import ENTRIES, SECTION_TITLES
 
 OTHER = "other"
 
 
+_OST4 = re.compile(r"ОСТ\s*4\s*Г[ОO0]\.?\s*(\d{3}\.\d{3})", re.I)
+
+
+# Справочные стандарты: общие положения и термины, в них нет требований, которые можно проверять по чертежу или техпроцессу
+REFERENCE_ONLY = {("ГОСТ", "2.001"), ("ГОСТ", "2.005"), ("ГОСТ", "3.1109"), ("ГОСТ", "14.004")}
+
+
+REF_PATH = os.path.join(DATA, "std_reference.json")           # выбор администратора: {"ГОСТ|2.001": true/false}
+
+
+def _rk(key: tuple) -> str:
+    return "|".join(key)
+
+
+def load_reference() -> dict:
+    try:
+        with open(REF_PATH, encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def set_reference(designation: str, value: bool | None) -> bool:
+    """Отметка администратора «справочный стандарт» (None — вернуть значение по умолчанию). Возвращает итоговое значение."""
+    key = _key(designation)
+    d = load_reference()
+    if value is None:
+        d.pop(_rk(key), None)
+    else:
+        d[_rk(key)] = bool(value)
+    tmp = REF_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, REF_PATH)
+    return d.get(_rk(key), key in REFERENCE_ONLY)
+
+
 def _key(designation: str) -> tuple:
     """Ключ без года и без признака «Р»: ('ГОСТ', '2.106') — чтобы связать редакции одного стандарта."""
+    m = _OST4.search(designation or "")
+    if m:                                                           # «ОСТ4 ГО.070.014» — не «ОСТ 4»: номер идёт после буквенной группы
+        return "ОСТ4 ГО", m.group(1)
     d = norms.parse_designation(designation)
     if d:
         return d[0], d[2]
@@ -33,7 +77,7 @@ def _fmt(d: tuple) -> str:
     kind, nat, num, yr = d
     yy = int(yr) if yr else 0
     full = (1900 + yy if yy >= 50 else 2000 + yy) if yr else 0
-    return f"{kind}{' Р' if nat else ''} {num}" + (f"-{full}" if yr else "")
+    return f"{kind}{' Р' if nat else ''} {num}" + ((f"-{full % 100:02d}" if full < 2000 else f"-{full}") if yr else "")
 
 
 @lru_cache(maxsize=256)
@@ -63,6 +107,19 @@ def _in_document(path: str, exp: tuple) -> bool:
     return n >= 3
 
 
+def _other_year(cnt: Counter, exp: tuple, path: str) -> tuple | None:
+    """Тот же номер, но другой год, и в тексте он встречается заметно чаще названного (файл назван по старой редакции)."""
+    if not exp or not exp[3]:
+        return None
+    alts = [(n, d) for d, n in cnt.items() if d[:3] == exp[:3] and d[3] != exp[3]]
+    if not alts:
+        return None
+    n, alt = max(alts)
+    if n >= 2 and n >= 2 * cnt.get(exp, 0) and not _in_document(path, exp):
+        return alt
+    return None
+
+
 def verify(path: str, designation: str, title: str = "") -> dict:
     """Сверяет файл с тем, чем он назван: обозначение, которое чаще всего встречается в тексте первых трёх страниц
     (колонтитулы повторяют обозначение стандарта), должно совпасть с ожидаемым по номеру, признаку «Р» и году;
@@ -75,6 +132,13 @@ def verify(path: str, designation: str, title: str = "") -> dict:
     flat = re.sub(r"\s+", " ", " ".join(pages))
     if len(flat) < 300:
         return {"status": "scan", "detected": "", "note": "в файле нет текста (скан): сверить обозначение нельзя"}
+    mo = _OST4.search(designation or "")
+    if mo:                                                           # отраслевой стандарт «ОСТ4 ГО.070.0xx»: сверяем номер по самому частому в тексте
+        found = Counter(m.group(1) for m in _OST4.finditer(flat))
+        if found and found.most_common(1)[0][0] != mo.group(1):
+            top = found.most_common(1)[0][0]
+            return {"status": "bad", "detected": f"ОСТ4 ГО.{top}",
+                    "note": f"в тексте файла «ОСТ4 ГО.{top}», а он загружен как «{designation}»: проверьте, тот ли это документ"}
     cnt = Counter()
     for m in norms._DESIG.finditer(flat):
         d = norms.parse_designation(m.group(0))
@@ -85,6 +149,11 @@ def verify(path: str, designation: str, title: str = "") -> dict:
     if cnt:
         top = cnt.most_common(1)[0][0]
         detected = _fmt(top)
+        alt = _other_year(cnt, exp, path)
+        if alt:
+            detected = _fmt(alt)
+            return {"status": "bad", "detected": detected,
+                    "note": f"в тексте файла «{detected}», а ожидается «{designation}»: другая редакция или год"}
         if exp and (exp in cnt or _in_document(path, exp)):   # обозначение из названия встречается в тексте: файл тот (сборники из нескольких стандартов тоже)
             pass
         elif exp and (top[0], top[2]) != (exp[0], exp[2]):
@@ -118,6 +187,13 @@ def reconcile(path: str, designation: str) -> tuple[str, str]:
         if d and d[3]:
             cnt[d] += 1
     exp = norms.parse_designation(designation)
+    alt = _other_year(cnt, exp, path)
+    if alt:
+        return _fmt(alt), f"в тексте файла «{_fmt(alt)}» (другой год), а не «{designation}»"
+    if cnt and exp and exp not in cnt:
+        for d in cnt:
+            if d[0] == exp[0] and d[2:] == exp[2:] and d[1] != exp[1] and cnt[d] >= 2:   # «Р» есть только в тексте или только в названии
+                return _fmt(d), "в тексте файла обозначение " + ("с «Р»" if d[1] else "без «Р»")
     if not cnt or not exp or exp in cnt or _in_document(path, exp):
         return designation, ""
     top, n = cnt.most_common(1)[0]
@@ -157,6 +233,7 @@ def _replaced_by(designation: str) -> str:
 
 
 def build(cfg: dict) -> dict:
+    reference = load_reference()
     files: dict[tuple, list[dict]] = {}
     for it in norms.listing():
         k = _key(it["designation"] if norms.parse_designation(it["designation"]) else it["id"])
@@ -203,6 +280,7 @@ def build(cfg: dict) -> dict:
             "rules": len(r["direct"]) if r else 0,
             "codes": sorted(r["direct"]) if r else [],
             "related": len(r["related"] - set(r["direct"])) if r else 0,
+            "reference": reference.get(_rk(_key(designation)), _key(designation) in REFERENCE_ONLY),
             "marks_open": open_marks.get(f["id"], 0) if f else 0, "cited_other": cited, "replaced_by": _replaced_by(was or designation), "catalog_was": was,
         }
 
@@ -228,7 +306,7 @@ def build(cfg: dict) -> dict:
         "total": len(rows), "loaded": sum(1 for r in rows if r["file"]),
         "needed_missing": sum(1 for r in rows if r["rules"] and not r["file"]),
         "edition_mismatch": sum(1 for r in rows if r["file"] and not r["file"]["same_edition"]),
-        "no_checks": sum(1 for r in rows if r["file"] and not r["rules"]),
+        "no_checks": sum(1 for r in rows if r["file"] and not r["rules"] and not r["reference"]),
         "marks_open": sum(open_marks.values()),
         "check_failed": sum(1 for r in rows if r["file"] and r["file"]["check"]["status"] in ("bad", "warn")),
         "stale_refs": sum(1 for r in rows if r["cited_other"]),

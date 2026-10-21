@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react"
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
+import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom"
+import { ADMIN_TABS, adminTabNow } from "@/lib/adminTabs"
 import { useTheme } from "@/lib/theme"
 import { useAuth } from "@/lib/auth"
 import { api } from "@/lib/api"
 import { jobWhen } from "@/lib/format"
 import type { HistoryItem } from "@/lib/types"
-import { FileCheck2, History, KeyRound, LogOut, Moon, Settings2, Sun, Upload, UserRound, BookOpen, TriangleAlert } from "lucide-react"
+import { FileCheck2, History, KeyRound, LogOut, Moon, Settings2, Sun, Upload, UserRound, ChevronDown, TriangleAlert } from "lucide-react"
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarInset,
-  SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger,
+  SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, SidebarProvider, SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -33,6 +34,8 @@ export default function Shell() {
   const loc = useLocation()
   const nav = useNavigate()
   const [open, setOpen] = useState(true)
+  const [sp] = useSearchParams()
+  const [setOpenTree, setSetOpenTree] = useState(true)
   const [hist, setHist] = useState<HistoryItem[]>([])
   const onJob = loc.pathname.startsWith("/job/")
 
@@ -66,12 +69,22 @@ export default function Shell() {
                   </SidebarMenuItem>
                   {isAdmin && (
                     <SidebarMenuItem>
-                      <SidebarMenuButton isActive={loc.pathname === "/admin"} tooltip="Настройки" render={<NavLink to="/admin" />}><Settings2 /><span>Настройки и журнал</span></SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )}
-                  {isAdmin && (
-                    <SidebarMenuItem>
-                      <SidebarMenuButton tooltip="Нормативы (ГОСТ)" render={<NavLink to="/admin?tab=norms" />}><BookOpen /><span>Нормативы (ГОСТ)</span></SidebarMenuButton>
+                      <SidebarMenuButton tooltip="Настройки" isActive={loc.pathname === "/admin"} onClick={() => setSetOpenTree(o => !o)}>
+                        <Settings2 /><span>Настройки</span>
+                        <ChevronDown className={"ml-auto size-4 transition-transform " + (setOpenTree ? "" : "-rotate-90")} />
+                      </SidebarMenuButton>
+                      {setOpenTree && (
+                        <SidebarMenuSub>
+                          {ADMIN_TABS.map(([k, t]) => (
+                            <SidebarMenuSubItem key={k}>
+                              <SidebarMenuSubButton
+                                isActive={loc.pathname === "/admin" && adminTabNow(sp) === k}
+                                render={<NavLink to={"/admin?tab=" + k} onClick={() => { try { localStorage.setItem("admin-tab", k) } catch { /* без хранилища */ } }} />}
+                              ><span>{t}</span></SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      )}
                     </SidebarMenuItem>
                   )}
                 </SidebarMenu>

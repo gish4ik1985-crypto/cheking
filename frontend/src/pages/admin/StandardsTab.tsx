@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown, ChevronRight, Copy, Download, FileUp, Search } from "lucide-react"
 import { toast } from "sonner"
 import { api, errText } from "@/lib/api"
@@ -8,19 +8,27 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ClauseTable } from "./ClauseTable"
 import { ClausesSheet, MARK_LABEL, type Mark } from "./StandardClauses"
 
 interface Check { status: "ok" | "bad" | "warn" | "scan"; detected: string; note: string }
 interface FileInfo { check: Check; id: string; designation: string; pages: number; size: number; has_text: boolean; source: string; same_edition: boolean }
 interface Row {
   designation: string; title: string; section: string; file: FileInfo | null; rules: number; codes: string[]; related: number
-  cited_other: string[]; replaced_by: string; catalog_was: string; marks_open: number
+  reference: boolean; cited_other: string[]; replaced_by: string; catalog_was: string; marks_open: number
 }
 interface Registry { sections: { key: string; title: string }[]; rows: Row[]; summary: { total: number; loaded: number; needed_missing: number; edition_mismatch: number; check_failed: number; no_checks: number; marks_open: number; stale_refs: number } }
 interface UpRes { file: string; ok: boolean; designation?: string; recognized?: boolean; error?: string; check?: Check; corrected?: string }
 
 type Filter = "all" | "missing" | "loaded" | "needed" | "stale" | "nochecks"
 const FILTERS: [Filter, string][] = [["all", "Все"], ["needed", "Нужны правилам, PDF нет"], ["missing", "PDF нет"], ["loaded", "PDF есть"], ["nochecks", "PDF есть, проверок нет"], ["stale", "Прежняя редакция в правилах"]]
+
+/** «ГОСТ Р 2.109-2023» → номер «ГОСТ Р 2.109» и год «2023» */
+function splitDes(d: string): { num: string; year: string } {
+  const m = d.match(/^(.*?)(?:\s*[-–—]\s*(\d{2,4}))?$/)
+  return { num: (m?.[1] ?? d).trim(), year: m?.[2] ?? "" }
+}
 
 export function StandardsTab() {
   const [reg, setReg] = useState<Registry | null>(null)
@@ -34,6 +42,7 @@ export function StandardsTab() {
   const rowRef = useRef<HTMLInputElement>(null)
   const rowDes = useRef("")
   const [sheet, setSheet] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [marks, setMarks] = useState<Mark[]>([])
   const loadMarks = useCallback(async () => { try { setMarks(await api<Mark[]>("/api/admin/standards/marks")) } catch { setMarks([]) } }, [])
   useEffect(() => { void loadMarks() }, [loadMarks])
@@ -42,6 +51,14 @@ export function StandardsTab() {
     try { setReg(await api<Registry>("/api/admin/standards/registry")); setErr("") } catch (e) { setErr(errText(e)) }
   }, [])
   useEffect(() => { void load() }, [load])
+
+  const toggleRef = async (r: Row) => {
+    try {
+      await api("/api/admin/standards/reference", { json: { designation: r.designation, reference: !r.reference } })
+      toast.success(r.reference ? "Отметка «справочный» снята" : "Стандарт отмечен справочным")
+      await load()
+    } catch (e) { toast.error(errText(e)) }
+  }
 
   const upload = async (files: FileList | File[], designation = "") => {
     const list = Array.from(files)
@@ -67,7 +84,7 @@ export function StandardsTab() {
     if (filter === "missing" && r.file) return false
     if (filter === "loaded" && !r.file) return false
     if (filter === "needed" && !(r.rules && !r.file)) return false
-    if (filter === "nochecks" && !(r.file && !r.rules)) return false
+    if (filter === "nochecks" && !(r.file && !r.rules && !r.reference)) return false
     if (filter === "stale" && !r.cited_other.length) return false
     const s = q.trim().toLowerCase()
     return !s || (r.designation + " " + r.title).toLowerCase().includes(s)
@@ -118,14 +135,13 @@ export function StandardsTab() {
         )}
 
         <div
-          className="flex flex-col items-center gap-2 rounded-lg border-2 border-dashed p-5 text-center text-sm text-muted-foreground"
+          className="flex flex-wrap items-center justify-start gap-3 rounded-lg border-2 border-dashed p-4 text-left text-sm text-muted-foreground"
           onDragOver={e => e.preventDefault()}
           onDrop={e => { e.preventDefault(); void upload(e.dataTransfer.files) }}
         >
           <input ref={bulkRef} type="file" multiple accept=".pdf,application/pdf" className="hidden" onChange={e => { if (e.target.files) void upload(e.target.files) }} />
-          <FileUp className="size-6" />
-          <span>Перетащите сюда PDF стандартов (можно сразу много) или</span>
-          <Button variant="outline" disabled={busy} onClick={() => bulkRef.current?.click()}>{busy ? "Загрузка…" : "Выбрать файлы"}</Button>
+          <Button variant="outline" disabled={busy} onClick={() => bulkRef.current?.click()}><FileUp />{busy ? "Загрузка…" : "Выбрать файлы"}</Button>
+          <span>или перетащите сюда PDF стандартов (можно сразу много)</span>
         </div>
         {res && (
           <div className="rounded-lg border p-3 text-sm">
@@ -163,49 +179,93 @@ export function StandardsTab() {
         {err && <p className="text-sm text-destructive">{err}</p>}
         {!reg && !err && <p className="text-sm text-muted-foreground">Загрузка…</p>}
 
-        {groups.map(g => {
-          if (forced && !g.shown.length) return null
-          const isOpen = forced ? true : !!open[g.key]
-          return (
-            <div key={g.key} className="overflow-hidden rounded-lg border">
-              <button type="button" className="flex w-full items-center gap-2 bg-muted/50 px-3 py-2 text-left text-sm font-medium" onClick={() => setOpen(o => ({ ...o, [g.key]: !o[g.key] }))}>
-                {isOpen ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-                <span className="flex-1">{g.title}</span>
-                <span className="text-xs font-normal text-muted-foreground">PDF: {g.have} из {g.rows.length}</span>
-              </button>
-              {isOpen && (
-                <Table>
-                  <TableHeader><TableRow><TableHead>Стандарт</TableHead><TableHead>Состояние</TableHead><TableHead>Проверок</TableHead><TableHead /></TableRow></TableHeader>
-                  <TableBody>
-                    {g.shown.map(r => (
-                      <TableRow key={r.designation + "|" + (r.file?.id ?? "")}>
-                        <TableCell className="whitespace-normal"><b>{r.designation}</b><div className="text-xs text-muted-foreground">{r.title}</div>
-                          {r.catalog_was && <div className="text-xs text-emerald-600">загружена редакция новее, чем в перечне ({r.catalog_was})</div>}
-                          {r.replaced_by && <div className="text-xs text-amber-600">заменён на {r.replaced_by}</div>}
-                          {r.cited_other.length > 0 && <div className="text-xs text-amber-600">правила ссылаются на: {r.cited_other.join(", ")}</div>}
+        {reg && (
+          <div className="overflow-auto rounded-lg border">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-muted">
+                <TableRow>
+                  <TableHead className="w-8" />
+                  <TableHead className="w-40">Стандарт</TableHead>
+                  <TableHead className="w-16">Год</TableHead>
+                  <TableHead>Название</TableHead>
+                  <TableHead className="w-40">PDF</TableHead>
+                  <TableHead className="w-24 text-center" title="Справочный стандарт: проверок по нему не планируется">Справочный</TableHead>
+                  <TableHead className="w-24 text-center" title="Сколько проверок ссылается на стандарт">Проверок</TableHead>
+                  <TableHead className="w-24 text-center" title="Заявки на проверки по пунктам">Заявок</TableHead>
+                  <TableHead className="w-36" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {groups.map(g => {
+                  if (forced && !g.shown.length) return null
+                  const isOpen = forced ? true : !!open[g.key]
+                  return (
+                    <Fragment key={g.key}>
+                      <TableRow className="cursor-pointer bg-muted/50 hover:bg-muted/70" onClick={() => setOpen(o => ({ ...o, [g.key]: !o[g.key] }))}>
+                        <TableCell colSpan={9} className="font-medium">
+                          <span className="flex items-center gap-2">
+                            {isOpen ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                            <span className="flex-1">{g.title}</span>
+                            <span className="text-xs font-normal text-muted-foreground">PDF: {g.have} из {g.rows.length}</span>
+                          </span>
                         </TableCell>
-                        <TableCell className="whitespace-normal">
-                          {r.file
-                            ? <div className="grid gap-0.5"><Badge>PDF загружен</Badge>{r.file.check.status === "bad" && <Badge variant="destructive">не тот документ?</Badge>}
-                              {r.file.check.status === "warn" && <Badge variant="secondary">проверьте название</Badge>}
-                              {r.file.check.status !== "ok" && <span className={cn("text-xs", r.file.check.status === "bad" ? "text-destructive" : "text-amber-600")}>{r.file.check.note}</span>}
-                              <span className="text-xs text-muted-foreground">{r.file.pages} стр.{!r.file.has_text && ", скан без текста"}{!r.file.same_edition && `, файл: ${r.file.designation}`}</span></div>
-                            : <Badge variant={r.rules ? "destructive" : "secondary"}>{r.rules ? "нужен правилам" : "нет PDF"}</Badge>}
-                        </TableCell>
-                        <TableCell title={r.codes.join(", ")}>{r.rules ? <span>{r.rules}{r.related ? <span className="text-muted-foreground"> (+{r.related})</span> : null}</span> : <span className="text-muted-foreground">—</span>}</TableCell>
-                        <TableCell><div className="flex justify-end gap-1">
-                          {r.file && <Button variant="outline" size="sm" onClick={() => setSheet(r.file!.id)}>Пункты{r.marks_open > 0 && <Badge className="ml-1">{r.marks_open}</Badge>}</Button>}
-                          {r.file && <Button variant="outline" size="sm" render={<a href={"/norms/" + encodeURIComponent(r.file.id)} target="_blank" rel="noreferrer" />}><Download />Открыть</Button>}
-                          <Button variant="ghost" size="sm" disabled={busy} onClick={() => { rowDes.current = r.designation; rowRef.current?.click() }}><FileUp />{r.file ? "Заменить" : "Загрузить"}</Button>
-                        </div></TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
-          )
-        })}
+                      {isOpen && g.shown.map(r => {
+                        const { num, year } = splitDes(r.designation)
+                        const fid = r.file?.id
+                        const ex = !!(fid && expanded[fid])
+                        return (
+                          <Fragment key={r.designation + "|" + (fid ?? "")}>
+                            <TableRow className={cn(r.reference && "text-muted-foreground")}>
+                              <TableCell className="px-1">
+                                {fid && <Button variant="ghost" size="icon-xs" aria-label={ex ? "Свернуть пункты" : "Показать пункты"} onClick={() => setExpanded(e => ({ ...e, [fid]: !e[fid] }))}>
+                                  {ex ? <ChevronDown /> : <ChevronRight />}</Button>}
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap font-medium">{num}</TableCell>
+                              <TableCell className="whitespace-nowrap">{year || <span className="text-muted-foreground">—</span>}</TableCell>
+                              <TableCell className="whitespace-normal">
+                                <div className="text-sm">{r.title}</div>
+                                {r.catalog_was && <div className="text-xs text-emerald-600">загружена редакция новее, чем в перечне ({r.catalog_was})</div>}
+                                {r.replaced_by && <div className="text-xs text-amber-600">заменён на {r.replaced_by}</div>}
+                                {r.cited_other.length > 0 && <div className="text-xs text-amber-600">правила ссылаются на: {r.cited_other.join(", ")}</div>}
+                              </TableCell>
+                              <TableCell className="whitespace-normal">
+                                {r.file
+                                  ? <div className="grid gap-0.5"><Badge>загружен</Badge>
+                                    {r.file.check.status === "bad" && <Badge variant="destructive">не тот документ?</Badge>}
+                                    {r.file.check.status === "warn" && <Badge variant="secondary">проверьте название</Badge>}
+                                    {r.file.check.status !== "ok" && <span className={cn("text-xs", r.file.check.status === "bad" ? "text-destructive" : "text-amber-600")}>{r.file.check.note}</span>}
+                                    <span className="text-xs text-muted-foreground">{r.file.pages} стр.{!r.file.has_text && ", скан без текста"}{!r.file.same_edition && `, файл: ${r.file.designation}`}</span></div>
+                                  : <Badge variant={r.rules ? "destructive" : "secondary"}>{r.rules ? "нужен правилам" : "нет"}</Badge>}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Checkbox checked={r.reference} onCheckedChange={() => void toggleRef(r)} aria-label={`${r.designation}: справочный`} />
+                              </TableCell>
+                              <TableCell className="text-center" title={r.codes.join(", ")}>{r.rules ? <span>{r.rules}{r.related ? <span className="text-muted-foreground"> (+{r.related})</span> : null}</span> : <span className="text-muted-foreground">—</span>}</TableCell>
+                              <TableCell className="text-center">{r.marks_open > 0 ? <Badge>{r.marks_open}</Badge> : <span className="text-muted-foreground">—</span>}</TableCell>
+                              <TableCell><div className="flex justify-end gap-1">
+                                {r.file && <Button variant="ghost" size="icon-xs" title="Открыть PDF" aria-label="Открыть PDF" render={<a href={"/norms/" + encodeURIComponent(r.file.id)} target="_blank" rel="noreferrer" />}><Download /></Button>}
+                                <Button variant="ghost" size="sm" disabled={busy} onClick={() => { rowDes.current = r.designation; rowRef.current?.click() }}><FileUp />{r.file ? "Заменить" : "Загрузить"}</Button>
+                              </div></TableCell>
+                            </TableRow>
+                            {ex && fid && (
+                              <TableRow className="bg-muted/20 hover:bg-muted/20">
+                                <TableCell />
+                                <TableCell colSpan={8} className="whitespace-normal p-0">
+                                  <ClauseTable fileId={fid} designation={r.designation} onChanged={() => { void load(); void loadMarks() }} onCollapse={() => setExpanded(e => ({ ...e, [fid]: false }))} />
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </Fragment>
+                        )
+                      })}
+                    </Fragment>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
         <ClausesSheet fileId={sheet} onClose={() => setSheet(null)} onChanged={() => { void load(); void loadMarks() }} />
       </CardContent>
     </Card>

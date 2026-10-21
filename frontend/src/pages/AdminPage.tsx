@@ -4,7 +4,7 @@ import { toast } from "sonner"
 import { api, ApiError, errText } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { AdminContext, type AdminState, type RulesMap } from "./admin/context"
 import RulesTab from "./admin/RulesTab"
 import CustomTab from "./admin/CustomTab"
@@ -13,10 +13,6 @@ import { StandardsTab } from "./admin/StandardsTab"
 import { ClassifierTab } from "./admin/ClassifierTab"
 import { ExceptionsTab, ListsTab, LogTab, NormsTab, ParamsTab, ReviewTab, UsersTab } from "./admin/OtherAdminTabs"
 
-const TABS: [string, string][] = [
-  ["rules", "Проверки по стандартам"], ["custom", "Свои правила"], ["params", "Параметры"], ["equip", "Оборудование"], ["lists", "Справочники"],
-  ["ex", "Исключения «не ошибка»"], ["users", "Пользователи"], ["stds", "Реестр стандартов"], ["cls", "Классификатор"], ["norms", "Нормативы"], ["review", "Отметки тестеров"], ["log", "Журнал действий"],
-]
 const clone = <T,>(o: T): T => JSON.parse(JSON.stringify(o))
 
 export default function AdminPage() {
@@ -109,21 +105,18 @@ export default function AdminPage() {
           <p className="text-sm text-muted-foreground">Какие проверки выполнять и с какой важностью — для всех пользователей программы. Настройки сразу действуют на все отчёты, в том числе уже сохранённые.</p>
         </div>
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="w-full flex-wrap justify-start gap-1 group-data-horizontal/tabs:h-auto [&>*]:h-8 [&>*]:flex-none">
-            {TABS.map(([k, v]) => <TabsTrigger key={k} value={k}>{v}</TabsTrigger>)}
-          </TabsList>
-          <TabsContent value="rules" className="pt-3"><RulesTab /></TabsContent>
-          <TabsContent value="custom" className="pt-3"><CustomTab /></TabsContent>
-          <TabsContent value="params" className="pt-3"><ParamsTab /></TabsContent>
-          <TabsContent value="equip" className="pt-3"><EquipmentTab /></TabsContent>
-          <TabsContent value="lists" className="pt-3"><ListsTab /></TabsContent>
-          <TabsContent value="ex" className="pt-3"><ExceptionsTab /></TabsContent>
-          <TabsContent value="users" className="pt-3"><UsersTab /></TabsContent>
-          <TabsContent value="stds" className="pt-3"><StandardsTab /></TabsContent>
-          <TabsContent value="cls" className="pt-3"><ClassifierTab /></TabsContent>
-          <TabsContent value="norms" className="pt-3"><NormsTab /></TabsContent>
-          <TabsContent value="review" className="pt-3"><ReviewTab /></TabsContent>
-          <TabsContent value="log" className="pt-3"><LogTab /></TabsContent>
+          <TabsContent value="rules" className="min-w-0 flex-1"><RulesTab /></TabsContent>
+          <TabsContent value="custom" className="min-w-0 flex-1"><CustomTab /></TabsContent>
+          <TabsContent value="params" className="min-w-0 flex-1"><ParamsTab /></TabsContent>
+          <TabsContent value="equip" className="min-w-0 flex-1"><EquipmentTab /></TabsContent>
+          <TabsContent value="lists" className="min-w-0 flex-1"><ListsTab /></TabsContent>
+          <TabsContent value="ex" className="min-w-0 flex-1"><ExceptionsTab /></TabsContent>
+          <TabsContent value="users" className="min-w-0 flex-1"><UsersTab /></TabsContent>
+          <TabsContent value="stds" className="min-w-0 flex-1"><StandardsTab /></TabsContent>
+          <TabsContent value="cls" className="min-w-0 flex-1"><ClassifierTab /></TabsContent>
+          <TabsContent value="norms" className="min-w-0 flex-1"><NormsTab /></TabsContent>
+          <TabsContent value="review" className="min-w-0 flex-1"><ReviewTab /></TabsContent>
+          <TabsContent value="log" className="min-w-0 flex-1"><LogTab /></TabsContent>
         </Tabs>
       </div>
 

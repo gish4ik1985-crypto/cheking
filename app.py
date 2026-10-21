@@ -796,6 +796,16 @@ def standards_detail():
     return jsonify(d)
 
 
+@app.get("/api/admin/standards/suggest")
+def standards_suggest():
+    """Кандидаты в проверки по тексту стандарта: пункты без проверок с проверяемым требованием."""
+    _need_admin()
+    d = stdclauses.suggest(load_config(), request.args.get("id", ""), min(500, max(1, request.args.get("limit", 12, type=int))), request.args.get("all") == "1")
+    if d is None:
+        return jsonify(error="Файл стандарта не найден"), 404
+    return jsonify(d)
+
+
 @app.get("/api/admin/standards/marks")
 def standards_marks():
     _need_admin()
@@ -841,6 +851,20 @@ def standards_mark_delete(mark_id):
 def standards_registry():
     _need_admin()
     return jsonify(stdreg.build(load_config()))
+
+
+@app.post("/api/admin/standards/reference")
+def standards_reference():
+    """Администратор отмечает стандарт справочным (проверок по нему не планируется) или снимает отметку."""
+    _need_admin()
+    data = request.get_json(silent=True) or {}
+    des = str(data.get("designation", "")).strip()
+    if not des:
+        return jsonify(error="Не указан стандарт"), 400
+    val = data.get("reference")
+    res = stdreg.set_reference(des, None if val is None else bool(val))
+    feedback.log(_user()["name"], "Стандарт отмечен справочным" if res else "Со стандарта снята отметка «справочный»", {"std": des})
+    return jsonify(designation=des, reference=res)
 
 
 @app.post("/api/admin/standards/upload")

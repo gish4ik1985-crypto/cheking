@@ -2147,7 +2147,7 @@ def test_standards_registry():
     rows = {r["designation"]: r for r in reg["rows"]}
     assert reg["summary"]["total"] == len(reg["rows"]) > 150
     assert rows["ГОСТ Р 2.106-2019"]["file"] and rows["ГОСТ Р 2.106-2019"]["file"]["same_edition"]   # PDF из standards/
-    assert rows["ГОСТ 25347-2013"]["file"] is None and rows["ГОСТ 25347-2013"]["rules"] > 0              # правила есть, PDF нет
+    assert reg["summary"]["needed_missing"] == sum(1 for r in reg["rows"] if r["file"] is None and r["rules"] > 0)              # правила есть, PDF нет
     assert "ГОСТ 2.109-73" not in rows["ГОСТ Р 2.109-2023"]["cited_other"]                            # ссылки правил переведены на Р 2.109-2023
     assert rows["ГОСТ Р 2.109-2023"]["rules"] >= 20 and rows["ГОСТ Р 2.316-2023"]["rules"] >= 12
     assert stdreg.detect_designation("ГОСТ 25346-2013.pdf") == "ГОСТ 25346-2013"
@@ -2182,6 +2182,9 @@ def test_standard_file_verification():
     year = stdreg.verify(path, "ГОСТ Р 2.109-2019")
     assert year["status"] == "bad"                                                 # не тот год
     assert stdreg.verify(path, "ГОСТ Р 2.109-2023", "Сварка. Соединения паяные основные типы")["status"] == "warn"   # не то название
+    assert stdreg._key("ОСТ4 ГО.070.014") != stdreg._key("ОСТ4 Г0.070.015") and stdreg._key("ОСТ4 Г0.070.014") == stdreg._key("ОСТ4 ГО.070.014")
+    assert stdreg.reconcile(path, "ГОСТ Р 2.109-2019")[0] == "ГОСТ Р 2.109-2023"       # в имени файла другой год: берём из текста
+    assert stdreg._fmt(("ГОСТ", 0, "2.709", "89")) == "ГОСТ 2.709-89" and stdreg._fmt(("ГОСТ", 1, "2.109", "23")) == "ГОСТ Р 2.109-2023"
 
 
 def test_standard_clauses_and_marks(tmp_path, monkeypatch):
@@ -2326,3 +2329,29 @@ def test_classifier_comparison_table():
     assert "K107" not in [f.code for f in d.findings]
     d = run("ДТМЛ.741211.001", material="Лист 8 ГОСТ 19903")
     assert "K107" not in [f.code for f in d.findings]                                 # «профильные» из названия класса 74 не считается
+
+
+def test_standard_reference_flag(tmp_path, monkeypatch):
+    from checking import stdreg
+    from checking.config import load_config
+    monkeypatch.setattr(stdreg, "REF_PATH", str(tmp_path / "ref.json"))
+    rows = lambda: {r["designation"]: r for r in stdreg.build(load_config())["rows"]}
+    assert rows()["ГОСТ 2.001-2013"]["reference"] is True                  # по умолчанию справочный
+    assert stdreg.set_reference("ГОСТ 2.001-2013", False) is False and rows()["ГОСТ 2.001-2013"]["reference"] is False
+    assert stdreg.set_reference("ГОСТ 2.102-2013", True) is True and rows()["ГОСТ 2.102-2013"]["reference"] is True
+    assert stdreg.set_reference("ГОСТ 2.001-2013", None) is True           # возврат к значению по умолчанию
+
+
+def test_standard_check_ideas():
+    from checking import stdclauses
+    from checking.config import load_config
+    d = stdclauses.suggest(load_config(), "ГОСТ Р 2.109-2023.pdf", 8)
+    assert d and d["items"] and d["found"] <= d["clauses_without_checks"]
+    covered = {c["n"] for c in stdclauses.detail(load_config(), "ГОСТ Р 2.109-2023.pdf")["clauses"] if c["checks"] or c["child_checks"]}
+    assert not covered & {i["n"] for i in d["items"]}                       # пункты, уже покрытые проверками, не предлагаются
+    assert all(i["hint"] and i["excerpt"] and i["score"] >= 4 for i in d["items"])
+    assert all({"what", "where", "how", "error", "hardness"} <= set(i["plan"]) and "Как:" in i["draft"] for i in d["items"])
+    full = stdclauses.suggest(load_config(), "ГОСТ Р 2.109-2023.pdf", include_all=True)
+    assert len(full["items"]) == full["clauses_without_checks"] > d["found"] and any(not i["candidate"] for i in full["items"])
+    assert stdclauses._limits("не менее 590 МПа и ±0,3 мм, Rz 40") == "590 МПа, ±0,3 мм, Rz 40"
+    assert stdclauses.suggest(load_config(), "нет такого.pdf") is None
